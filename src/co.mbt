@@ -49,6 +49,7 @@ pub fn Routine::new(
   let callee = Context::new()
   let self : Routine = { state: Running, caller, callee, stack }
   co_reset(caller, stack, f => f(), () => {
+    self.yield_()
     f(self)
     guard self.state is Running else {
       abort("Coroutine not in Running state at completion")
@@ -59,10 +60,8 @@ pub fn Routine::new(
 }
 
 ///|
-pub fn Routine::resume_(self : Routine) -> Unit {
-  guard self.state is Yielded else {
-    abort("Cannot resume a running coroutine")
-  }
+pub fn Routine::try_resume(self : Routine) -> Bool {
+  guard self.state is Yielded else { return false }
   self.state = Running
   co_shift(self.caller, self.callee)
   // Extend the lifetime of self.stack past co_shift.
@@ -100,6 +99,7 @@ pub fn Routine::resume_(self : Routine) -> Unit {
   //   ignore(self.stack)
   //   decref(self)          ← safe: back on caller's stack
   ignore(self.stack)
+  true
 }
 
 ///|
@@ -117,10 +117,8 @@ pub fn Routine::stopped(self : Routine) -> Bool {
 }
 
 ///|
-pub fn Routine::try_resume(self : Routine) -> Bool {
-  guard self.state is Yielded else { return false }
-  self.state = Running
-  co_shift(self.caller, self.callee)
-  ignore(self.stack)
-  true
+pub fn Routine::resume_(self : Routine) -> Unit {
+  if !self.try_resume() {
+    abort("Cannot resume a running coroutine")
+  }
 }

@@ -9,7 +9,8 @@ test "yield_ and resume_" {
   values.push(3)
   co.resume_()
   values.push(4)
-  assert_eq(values, [1, 3, 2, 4])
+  co.resume_()
+  assert_eq(values, [3, 1, 4, 2])
 }
 
 ///|
@@ -57,8 +58,8 @@ test "Generator (Fibonacci)" {
   })
   let results = []
   for i = 0; i < 10; i = i + 1 {
-    results.push(buf.val)
     fib.resume_()
+    results.push(buf.val)
   }
   assert_eq(results, [0, 1, 1, 2, 3, 5, 8, 13, 21, 34])
 }
