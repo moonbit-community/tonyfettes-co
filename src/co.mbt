@@ -65,7 +65,7 @@ pub fn Routine::resume_(self : Routine) -> Unit {
 ///|
 pub fn Routine::yield_(self : Routine) -> Unit {
   guard self.state is Running(caller~, callee~, stack~) else {
-    abort("Cannot yield in a yielded coroutine")
+    abort("Cannot yield from a yielded coroutine")
   }
   ignore(stack)
   self.state = Yielded(caller~, callee~, stack~)

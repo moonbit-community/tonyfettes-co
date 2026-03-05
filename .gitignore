@@ -1,4 +1,10 @@
+# MoonBit
 _build/
 target
 .mooncakes/
+
+# macOS
 .DS_Store
+
+# clangd
+compile_flags.txt
