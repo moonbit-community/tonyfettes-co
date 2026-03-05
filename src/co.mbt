@@ -9,11 +9,10 @@ extern "c" fn Context::new() -> Context = "moonbit_co_context_make"
 extern "c" fn co_shift(from : Context, to : Context) = "moonbit_co_shift"
 
 ///|
-#borrow(context, stack_base, func, data)
+#borrow(context, stack, data)
 extern "c" fn co_reset(
   context : Context,
-  stack_base : Stack,
-  stack_size : UInt64,
+  stack : Stack,
   func : FuncRef[(() -> Unit) -> Unit],
   data : () -> Unit,
 ) = "moonbit_co_reset"
@@ -48,13 +47,12 @@ pub fn Routine::new(
   let caller = Context::new()
   let callee = Context::new()
   let self : Routine = { state: Running, caller, callee, stack }
-  co_reset(caller, stack, stack_size, f => f(), () => {
+  co_reset(caller, stack, f => f(), () => {
     f(self)
     guard self.state is Running else {
       abort("Coroutine not in Running state at completion")
     }
     self.state = Stopped
-    ignore(self.stack)
   })
   self
 }
@@ -66,6 +64,7 @@ pub fn Routine::resume_(self : Routine) -> Unit {
   }
   self.state = Running
   co_shift(self.caller, self.callee)
+  ignore(self.stack)
 }
 
 ///|

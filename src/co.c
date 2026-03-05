@@ -1,5 +1,11 @@
 #include <moonbit.h>
 #include <stdint.h>
+#include <stdlib.h>
+
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 typedef struct moonbit_co_context {
 #if defined(__x86_64__)
@@ -38,11 +44,61 @@ moonbit_co_context_make(void) {
   );
 }
 
-MOONBIT_FFI_EXPORT
-void *
-moonbit_co_stack_make(uint64_t size) {
-  return (void *)moonbit_make_bytes((int32_t)size, 0);
+typedef struct {
+  void *base;
+  uint64_t size;
+} co_stack_t;
+
+#if defined(__unix__) || defined(__APPLE__)
+
+static void
+co_stack_finalize(void *self) {
+  co_stack_t *stack = (co_stack_t *)self;
+  long page_size = sysconf(_SC_PAGESIZE);
+  void *mmap_base = (char *)stack->base - page_size;
+  munmap(mmap_base, page_size + stack->size);
 }
+
+MOONBIT_FFI_EXPORT
+co_stack_t *
+moonbit_co_stack_make(uint64_t size) {
+  long page_size = sysconf(_SC_PAGESIZE);
+  size = (size + page_size - 1) & ~(page_size - 1);
+  size_t total = page_size + size;
+  void *base = mmap(
+    NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0
+  );
+  if (base == MAP_FAILED) {
+    abort();
+  }
+  mprotect(base, page_size, PROT_NONE);
+  co_stack_t *stack = (co_stack_t *)moonbit_make_external_object(
+    co_stack_finalize, sizeof(co_stack_t)
+  );
+  stack->base = (char *)base + page_size;
+  stack->size = size;
+  return stack;
+}
+
+#else
+
+static void
+co_stack_finalize(void *self) {
+  (void)self;
+}
+
+MOONBIT_FFI_EXPORT
+co_stack_t *
+moonbit_co_stack_make(uint64_t size) {
+  co_stack_t *stack = (co_stack_t *)moonbit_make_external_object(
+    co_stack_finalize, sizeof(co_stack_t)
+  );
+  stack->base = (void *)moonbit_make_bytes((int32_t)size, 0);
+  stack->size = size;
+  return stack;
+}
+
+#endif
 
 extern void
 moonbit_co_shift(moonbit_co_context_t *from, moonbit_co_context_t *to);
@@ -59,12 +115,11 @@ MOONBIT_FFI_EXPORT
 void
 moonbit_co_reset(
   moonbit_co_context_t *context,
-  void *stack_base,
-  uint64_t stack_size,
+  co_stack_t *stack,
   void (*func)(void *),
   void *data
 ) {
-  uintptr_t sp = (uintptr_t)stack_base + stack_size;
+  uintptr_t sp = (uintptr_t)stack->base + stack->size;
   sp &= ~(uintptr_t)0xF;
   moonbit_co__reset(context, (void *)sp, func, data);
 }
