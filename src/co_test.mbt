@@ -102,7 +102,7 @@ test "Same-fringe problem" {
   let co2 = @co.Routine::new(co => walk(tree2, co, buf2))
 
   // Resume both in lockstep and compare leaves.
-  let same = for {
+  let same = for ;; {
     let done1 = co1.stopped()
     let done2 = co2.stopped()
     if done1 && done2 {
@@ -128,7 +128,7 @@ test "Same-fringe problem" {
   let co3 = @co.Routine::new(co => walk(tree1, co, buf3))
   let co4 = @co.Routine::new(co => walk(tree3, co, buf4))
 
-  let same2 = for {
+  let same2 = for ;; {
     let done3 = co3.stopped()
     let done4 = co4.stopped()
     if done3 && done4 {
