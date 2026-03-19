@@ -20,16 +20,16 @@ typedef struct moonbit_co_context {
 #ifdef _WIN32
   uint64_t rdi;
   uint64_t rsi;
-  uint8_t  xmm6[16];
-  uint8_t  xmm7[16];
-  uint8_t  xmm8[16];
-  uint8_t  xmm9[16];
-  uint8_t  xmm10[16];
-  uint8_t  xmm11[16];
-  uint8_t  xmm12[16];
-  uint8_t  xmm13[16];
-  uint8_t  xmm14[16];
-  uint8_t  xmm15[16];
+  uint8_t xmm6[16];
+  uint8_t xmm7[16];
+  uint8_t xmm8[16];
+  uint8_t xmm9[16];
+  uint8_t xmm10[16];
+  uint8_t xmm11[16];
+  uint8_t xmm12[16];
+  uint8_t xmm13[16];
+  uint8_t xmm14[16];
+  uint8_t xmm15[16];
 #endif
 #elif defined(__aarch64__)
   uint64_t sp;
@@ -127,7 +127,7 @@ extern void
 moonbit_co__reset(
   moonbit_co_context_t *context,
   void *stack_top,
-  void (*func)(void *),
+  moonbit_co_context_t *(*func)(void *),
   void *data
 );
 
@@ -136,7 +136,7 @@ void
 moonbit_co_reset(
   moonbit_co_context_t *context,
   co_stack_t *stack,
-  void (*func)(void *),
+  moonbit_co_context_t *(*func)(void *),
   void *data
 ) {
   uintptr_t sp = (uintptr_t)stack->base + stack->size;

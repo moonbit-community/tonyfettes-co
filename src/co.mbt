@@ -13,8 +13,8 @@ extern "c" fn co_shift(from : Context, to : Context) = "moonbit_co_shift"
 extern "c" fn co_reset(
   context : Context,
   stack : Stack,
-  func : FuncRef[(() -> Unit) -> Unit],
-  data : () -> Unit,
+  func : FuncRef[(() -> Context) -> Context],
+  data : () -> Context,
 ) = "moonbit_co_reset"
 
 ///|
@@ -24,46 +24,92 @@ priv type Stack
 extern "c" fn Stack::new(size : UInt64) -> Stack = "moonbit_co_stack_make"
 
 ///|
-priv enum RoutineState {
+priv enum State {
   Running
   Yielded
   Stopped
-}
+} derive(Show)
 
 ///|
 struct Routine {
-  mut state : RoutineState
-  caller : Context
-  callee : Context
-  stack : Stack
+  name : String
+  mut caller : Routine?
+  mut state : State
+  context : Context
+  stack : Stack?
 }
 
 ///|
-#as_free_fn(create)
-pub fn Routine::new(
-  stack_size? : UInt64 = 65536,
-  f : (Routine) -> Unit,
+fn Routine::new(
+  name~ : String,
+  caller? : Routine,
+  state~ : State,
+  stack? : Stack,
 ) -> Routine {
+  Routine::{ name, caller, state, context: Context::new(), stack }
+}
+
+///|
+let main : Routine = Routine::new(name="main", state=Running)
+
+///|
+// fn init {
+//   @stdlib.atexit(() => {
+//     while main.ready.pop_front() is Some(co) {
+//       main.switch(co)
+//     }
+//     main.state = Stopped
+//   })
+//   |> ignore()
+// }
+
+///|
+let current : Ref[Routine] = Ref::new(main)
+
+///|
+#callsite(autofill(loc))
+pub fn create(
+  loc~ : SourceLoc,
+  name? : String = loc.to_string(),
+  stack_size? : UInt64 = 65536,
+  f : () -> Unit,
+) -> Unit {
+  let caller = current.val
   let stack = Stack::new(stack_size)
-  let caller = Context::new()
-  let callee = Context::new()
-  let self : Routine = { state: Running, caller, callee, stack }
-  co_reset(caller, stack, f => f(), () => {
-    self.yield_()
-    f(self)
-    guard self.state is Running else {
+  let callee : Routine = Routine::new(name~, caller~, state=Running, stack~)
+  caller.state = Yielded
+  current.val = callee
+  co_reset(caller.context, stack, f => f(), () => {
+    println("create: \{callee.name} start")
+    f()
+    println("create: \{callee.name} end")
+    guard callee.state is Running else {
       abort("Coroutine not in Running state at completion")
     }
-    self.state = Stopped
+    guard callee.caller is Some(caller) else {
+      abort("@tonyfettes/co: Coroutine is not resumed from anywhere")
+    }
+    callee.state = Stopped
+    caller.state = Running
+    current.val = caller
+    println(
+      "create: \{callee.name}(\{callee.state}) -> \{caller.name}(\{caller.state})",
+    )
+    caller.context
   })
-  self
 }
 
 ///|
-pub fn Routine::try_resume(self : Routine) -> Bool {
-  guard self.state is Yielded else { return false }
-  self.state = Running
-  co_shift(self.caller, self.callee)
+fn Routine::switch(self : Routine, other : Routine) -> Unit {
+  guard (self.state, other.state) is (Running, Yielded) else {
+    abort(
+      "@tonyfettes/co: Cannot switch from \{self.name}(\{self.state}) to \{other.name}(\{other.state})",
+    )
+  }
+  self.state = Yielded
+  other.state = Running
+  current.val = other
+  co_shift(self.context, other.context)
   // Extend the lifetime of self.stack past co_shift.
   //
   // MoonBit uses reference counting. Without this ignore, the compiler
@@ -98,27 +144,57 @@ pub fn Routine::try_resume(self : Routine) -> Bool {
   //   co_shift ◄──────────────────── co_reset.S restores caller ctx
   //   ignore(self.stack)
   //   decref(self)          ← safe: back on caller's stack
-  ignore(self.stack)
-  true
+  ignore(other.stack)
 }
 
 ///|
-pub fn Routine::yield_(self : Routine) -> Unit {
-  guard self.state is Running else {
-    abort("Cannot yield from a yielded coroutine")
+fn Routine::resume_(self : Routine) -> Unit {
+  let caller = current.val
+  self.caller = Some(caller)
+  println(
+    "resume: \{caller.name}(\{caller.state}) -> \{self.name}(\{self.state})",
+  )
+  caller.switch(self)
+  println(
+    "resume: \{caller.name}(\{caller.state}) <- \{self.name}(\{self.state})",
+  )
+}
+
+///|
+fn yield_() -> Unit {
+  let callee = current.val
+  guard callee.caller is Some(caller) else {
+    abort("@tonyfettes/co(\{callee.name}): No coroutine to yield to")
   }
-  self.state = Yielded
-  co_shift(self.callee, self.caller)
+  callee.switch(caller)
 }
 
 ///|
-pub fn Routine::stopped(self : Routine) -> Bool {
-  self.state is Stopped
+pub struct Channel[T] {
+  values : @deque.Deque[T]
+  readers : @deque.Deque[Routine]
 }
 
 ///|
-pub fn Routine::resume_(self : Routine) -> Unit {
-  if !self.try_resume() {
-    abort("Cannot resume a running coroutine")
+pub fn[T] Channel::new() -> Channel[T] {
+  Channel::{ values: @deque.Deque::new(), readers: @deque.Deque::new() }
+}
+
+///|
+pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
+  self.values.push_back(value)
+  if self.readers.pop_front() is Some(reader) {
+    reader.resume_()
   }
+}
+
+///|
+pub fn[T] Channel::recv(self : Channel[T]) -> T {
+  if self.values.pop_front() is Some(value) {
+    return value
+  }
+  self.readers.push_back(current.val)
+  yield_()
+  guard self.values.pop_front() is Some(value) else { abort("No value sent") }
+  value
 }

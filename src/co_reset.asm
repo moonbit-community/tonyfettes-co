@@ -1,5 +1,10 @@
 ; moonbit_co__reset(ctx, stack_top, func, arg)
 ; Win64 ABI: rcx=ctx, rdx=stack_top, r8=func, r9=arg
+;
+; Saves the current context into ctx, switches sp to stack_top,
+; calls func(arg) on the new stack. func returns a pointer to a
+; context. When func returns, restores the saved context from
+; the returned pointer and returns to the caller.
 
 _TEXT SEGMENT
 
@@ -29,9 +34,6 @@ moonbit_co__reset PROC
   movdqu [rcx+208], xmm14
   movdqu [rcx+224], xmm15
 
-  ; Preserve ctx pointer in a callee-saved register
-  mov r12, rcx
-
   ; Switch to the new stack
   mov rsp, rdx
 
@@ -39,33 +41,33 @@ moonbit_co__reset PROC
   sub rsp, 32
 
   ; Call func(arg): rcx=arg (first param on Win64), func is in r8
+  ; func returns a context pointer in rax
   mov rcx, r9
   call r8
 
-  ; Restore context from ctx
-  mov rsp, [r12]
-  mov rbp, [r12+8]
-  mov rbx, [r12+16]
-  ; r12 restored last since we're using it as ctx pointer
-  mov r13, [r12+32]
-  mov r14, [r12+40]
-  mov r15, [r12+48]
-  mov rax, [r12+56]
-  mov [rsp], rax
+  ; Restore context from the pointer returned by func (in rax)
+  mov rsp, [rax]
+  mov rbp, [rax+8]
+  mov rbx, [rax+16]
+  mov r12, [rax+24]
+  mov r13, [rax+32]
+  mov r14, [rax+40]
+  mov r15, [rax+48]
+  mov rcx, [rax+56]
+  mov [rsp], rcx
   ; Restore Win64 extra callee-saved registers
-  mov rdi, [r12+64]
-  mov rsi, [r12+72]
-  movdqu xmm6, [r12+80]
-  movdqu xmm7, [r12+96]
-  movdqu xmm8, [r12+112]
-  movdqu xmm9, [r12+128]
-  movdqu xmm10, [r12+144]
-  movdqu xmm11, [r12+160]
-  movdqu xmm12, [r12+176]
-  movdqu xmm13, [r12+192]
-  movdqu xmm14, [r12+208]
-  movdqu xmm15, [r12+224]
-  mov r12, [r12+24]
+  mov rdi, [rax+64]
+  mov rsi, [rax+72]
+  movdqu xmm6, [rax+80]
+  movdqu xmm7, [rax+96]
+  movdqu xmm8, [rax+112]
+  movdqu xmm9, [rax+128]
+  movdqu xmm10, [rax+144]
+  movdqu xmm11, [rax+160]
+  movdqu xmm12, [rax+176]
+  movdqu xmm13, [rax+192]
+  movdqu xmm14, [rax+208]
+  movdqu xmm15, [rax+224]
 
   ret
 moonbit_co__reset ENDP
