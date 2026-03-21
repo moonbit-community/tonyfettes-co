@@ -99,3 +99,28 @@ test "Bidirectional: main <-> f" {
   backward.send(2)
   println("main: after backward.send(2)")
 }
+
+///|
+test "Future: wait for result" {
+  let f = @co.Future::new(name="compute", () => 21 * 2)
+  assert_eq(f.wait(), 42)
+}
+
+///|
+test "Future: multiple futures" {
+  let a = @co.Future::new(name="a", () => 10)
+  let b = @co.Future::new(name="b", () => 20)
+  let c = @co.Future::new(name="c", () => 30)
+  assert_eq(a.wait() + b.wait() + c.wait(), 60)
+}
+
+///|
+test "Future: blocks until ready" {
+  let chan = @co.Channel::new()
+  let f = @co.Future::new(name="waiter", () => {
+    let v = chan.recv()
+    v * 2
+  })
+  chan.send(5)
+  assert_eq(f.wait(), 10)
+}
