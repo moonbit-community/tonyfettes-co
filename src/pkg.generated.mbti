@@ -1,16 +1,28 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "tonyfettes/co"
 
+import {
+  "moonbitlang/core/deque",
+}
+
 // Values
+#callsite(autofill(loc))
+pub fn create(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Unit
+
+pub fn yield_() -> Unit
 
 // Errors
 
 // Types and methods
+pub struct Channel[T] {
+  values : @deque.Deque[T]
+  readers : @deque.Deque[Routine]
+}
+pub fn[T] Channel::new() -> Self[T]
+pub fn[T] Channel::recv(Self[T]) -> T
+pub fn[T] Channel::send(Self[T], T) -> Unit
+
 type Routine
-pub fn Routine::new(stack_size? : UInt64, (Self) -> Unit) -> Self
-pub fn Routine::resume_(Self) -> Unit
-pub fn Routine::stopped(Self) -> Bool
-pub fn Routine::yield_(Self) -> Unit
 
 // Type aliases
 
