@@ -2,7 +2,7 @@
 test "Channel" {
   let chan = @co.Channel::new()
   let done = @co.Channel::new()
-  @co.create(name="f", () => {
+  @co.launch(name="f", () => {
     println("f: 1")
     println("f: chan.recv() -> \{chan.recv()}")
     println("f: 2")
@@ -24,7 +24,7 @@ test "Bidirectional: f <-> g" {
   let forward = @co.Channel::new()
   let backward = @co.Channel::new()
   let done = @co.Channel::new()
-  @co.create(name="f", () => {
+  @co.launch(name="f", () => {
     println("f: before forward.send(1)")
     forward.send(1)
     println("f: after forward.send(1)")
@@ -32,7 +32,7 @@ test "Bidirectional: f <-> g" {
     println("f: after backward.recv() -> \{backward.recv()}")
     done.send(())
   })
-  @co.create(name="g", () => {
+  @co.launch(name="g", () => {
     println("g: before forward.recv()")
     println("g: after forward.recv() -> \{forward.recv()}")
     println("g: before backward.send(2)")
@@ -52,7 +52,7 @@ test "Channel: values follow FIFO" {
   chan.send(2)
   chan.send(3)
   let results = []
-  @co.create(name="reader", () => {
+  @co.launch(name="reader", () => {
     results.push(chan.recv())
     results.push(chan.recv())
     results.push(chan.recv())
@@ -67,11 +67,11 @@ test "Channel: readers follow FIFO" {
   let chan : @co.Channel[Int] = @co.Channel::new()
   let done : @co.Channel[Unit] = @co.Channel::new()
   let results = []
-  @co.create(name="reader1", () => {
+  @co.launch(name="reader1", () => {
     results.push(("reader1", chan.recv()))
     done.send(())
   })
-  @co.create(name="reader2", () => {
+  @co.launch(name="reader2", () => {
     results.push(("reader2", chan.recv()))
     done.send(())
   })
@@ -86,7 +86,7 @@ test "Channel: readers follow FIFO" {
 test "Bidirectional: main <-> f" {
   let forward = @co.Channel::new()
   let backward = @co.Channel::new()
-  @co.create(name="f", () => {
+  @co.launch(name="f", () => {
     println("f: before forward.send(1)")
     forward.send(1)
     println("f: after forward.send(1)")

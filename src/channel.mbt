@@ -1,5 +1,5 @@
 ///|
-pub struct Channel[T] {
+struct Channel[T] {
   values : @deque.Deque[T]
   readers : @deque.Deque[Routine]
 }

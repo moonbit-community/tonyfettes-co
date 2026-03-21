@@ -1,6 +1,6 @@
 ///|
-pub struct Future[T] {
-  priv chan : Channel[T]
+struct Future[T] {
+  chan : Channel[T]
 }
 
 ///|
@@ -12,7 +12,7 @@ pub fn[T] Future::new(
   f : () -> T,
 ) -> Future[T] {
   let chan : Channel[T] = Channel::new()
-  create(loc~, name~, stack_size~, () => chan.send(f()))
+  launch(loc~, name~, stack_size~, () => chan.send(f()))
   Future::{ chan, }
 }
 

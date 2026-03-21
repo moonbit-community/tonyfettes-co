@@ -31,7 +31,7 @@ priv enum State {
 } derive(Show)
 
 ///|
-struct Routine {
+priv struct Routine {
   name : String
   mut state : State
   context : Context
@@ -73,7 +73,7 @@ fn schedule() -> Unit {
 
 ///|
 #callsite(autofill(loc))
-pub fn create(
+pub fn launch(
   loc~ : SourceLoc,
   name? : String = loc.to_string(),
   stack_size? : UInt64 = 65536,
