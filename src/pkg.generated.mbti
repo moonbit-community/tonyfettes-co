@@ -5,8 +5,6 @@ package "tonyfettes/co"
 #callsite(autofill(loc))
 pub fn launch(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Unit
 
-pub fn yield_() -> Unit
-
 // Errors
 
 // Types and methods
@@ -19,6 +17,14 @@ type Future[T]
 #callsite(autofill(loc))
 pub fn[T] Future::new(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> T) -> Self[T]
 pub fn[T] Future::wait(Self[T]) -> T
+
+type Task
+pub fn Task::current() -> Self
+#as_free_fn(create)
+#callsite(autofill(loc))
+pub fn Task::new(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Self
+pub fn Task::schedule(Self) -> Unit
+pub fn Task::suspend() -> Unit
 
 // Type aliases
 

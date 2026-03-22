@@ -1,7 +1,7 @@
 ///|
 struct Channel[T] {
   values : @deque.Deque[T]
-  readers : @deque.Deque[Routine]
+  readers : @deque.Deque[Task]
 }
 
 ///|
@@ -13,8 +13,7 @@ pub fn[T] Channel::new() -> Channel[T] {
 pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
   self.values.push_back(value)
   if self.readers.pop_front() is Some(reader) {
-    reader.state = Yielded
-    ready.push_back(reader)
+    reader.schedule()
   }
 }
 
@@ -23,10 +22,9 @@ pub fn[T] Channel::recv(self : Channel[T]) -> T {
   if self.values.pop_front() is Some(value) {
     return value
   }
-  let self_co = curr.val
-  self_co.state = Yielded
-  self.readers.push_back(self_co)
-  schedule()
+  let routine = Task::current()
+  self.readers.push_back(routine)
+  Task::suspend()
   guard self.values.pop_front() is Some(value) else {
     abort("@tonyfettes/co: recv woke up but no value available")
   }

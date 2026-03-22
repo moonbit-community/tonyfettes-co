@@ -31,7 +31,7 @@ priv enum State {
 } derive(Show)
 
 ///|
-priv struct Routine {
+struct Task {
   name : String
   mut state : State
   context : Context
@@ -39,28 +39,61 @@ priv struct Routine {
 }
 
 ///|
-fn Routine::new(name~ : String, state~ : State, stack? : Stack) -> Routine {
-  Routine::{ name, state, context: Context::new(), stack }
+fn Task::raw(name~ : String, state~ : State, stack? : Stack) -> Task {
+  Task::{ name, state, context: Context::new(), stack }
 }
 
 ///|
-let main : Routine = Routine::new(name="main", state=Running)
+let main : Task = Task::raw(name="main", state=Running)
 
 ///|
-let curr : Ref[Routine] = Ref::new(main)
+let curr : Ref[Task] = Ref::new(main)
 
 ///|
-let ready : @deque.Deque[Routine] = @deque.Deque::new()
+priv struct Scheduler {
+  ready : @deque.Deque[Task]
+}
 
 ///|
-/// Pop the next ready coroutine and switch to it.
-/// The caller must have already set current's state and enqueued it
-/// (to ready queue or a channel's readers) before calling this.
-fn schedule() -> Unit {
-  guard ready.pop_front() is Some(next) else {
-    abort("@tonyfettes/co: deadlock — all coroutines are blocked")
+fn Scheduler::new() -> Scheduler {
+  Scheduler::{ ready: @deque.Deque::new() }
+}
+
+///|
+/// Pick the next ready coroutine, polling the runtime if none are available.
+fn Scheduler::next(self : Scheduler) -> Task {
+  loop self.ready.pop_front() {
+    Some(next) => next
+    None => {
+      @runtime.yield_()
+      continue self.ready.pop_front()
+    }
   }
+}
+
+///|
+let scheduler : Scheduler = Scheduler::new()
+
+///|
+fn Scheduler::schedule(self : Scheduler, task : Task) -> Unit {
+  self.ready.push_back(task)
+}
+
+///|
+/// Get the currently running routine.
+pub fn Task::current() -> Task {
+  curr.val
+}
+
+///|
+/// Suspend the current routine until someone calls `unpark` on it.
+/// The caller must ensure this routine's handle has been stored somewhere
+/// (ready queue, channel readers, IO pending, etc.) before calling park,
+/// otherwise it will never be woken up.
+pub fn Task::suspend() -> Unit {
   let prev = curr.val
+  prev.state = Yielded
+  let next = scheduler.next()
   next.state = Running
   co_shift(prev.context, next.context)
   // We just woke up — set current to ourselves.
@@ -72,45 +105,54 @@ fn schedule() -> Unit {
 }
 
 ///|
+/// Make a parked routine runnable by pushing it to the ready queue.
+pub fn Task::schedule(self : Task) -> Unit {
+  scheduler.schedule(self)
+}
+
+///|
 #callsite(autofill(loc))
-pub fn launch(
+#as_free_fn(create)
+pub fn Task::new(
   loc~ : SourceLoc,
   name? : String = loc.to_string(),
   stack_size? : UInt64 = 65536,
   f : () -> Unit,
-) -> Unit {
+) -> Task {
   let creator = curr.val
   let stack = Stack::new(stack_size)
-  let callee : Routine = Routine::new(name~, state=Running, stack~)
+  let task = Task::raw(name~, state=Running, stack~)
   creator.state = Yielded
-  ready.push_back(creator)
-  curr.val = callee
+  scheduler.schedule(creator)
+  curr.val = task
   // Note: unlike co_shift in schedule(), we don't need ignore(callee.stack)
   // here because #borrow(stack) on co_reset keeps the `stack` parameter alive
   // across the call, preventing munmap even if `callee` is decreffed early.
   co_reset(creator.context, stack, f => f(), () => {
     f()
-    guard callee.state is Running else {
+    guard task.state is Running else {
       abort(
-        "@tonyfettes/co: coroutine \{callee.name} not Running at completion (\{callee.state})",
+        "@tonyfettes/co: coroutine \{task.name} not Running at completion (\{task.state})",
       )
     }
-    callee.state = Stopped
-    guard ready.pop_front() is Some(next) else {
-      abort("@tonyfettes/co: deadlock — all coroutines are blocked")
-    }
+    task.state = Stopped
+    let next = scheduler.next()
     next.state = Running
     next.context
   })
   // Creator resumes here (via co_shift → co_reset restore).
-  // Set current to ourselves — same logic as after co_shift in schedule().
+  // Set current to ourselves — same logic as after co_shift in park().
   curr.val = creator
+  task
 }
 
 ///|
-pub fn yield_() -> Unit {
-  let self = curr.val
-  self.state = Yielded
-  ready.push_back(self)
-  schedule()
+#callsite(autofill(loc))
+pub fn launch(
+  loc~ : SourceLoc,
+  name? : String,
+  stack_size? : UInt64,
+  f : () -> Unit,
+) -> Unit {
+  ignore(create(loc~, name?, stack_size?, f))
 }
