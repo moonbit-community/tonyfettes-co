@@ -39,12 +39,12 @@ struct Task {
 }
 
 ///|
-fn Task::raw(name~ : String, state~ : State, stack? : Stack) -> Task {
+fn Task::new(name~ : String, state~ : State, stack? : Stack) -> Task {
   Task::{ name, state, context: Context::new(), stack }
 }
 
 ///|
-let main : Task = Task::raw(name="main", state=Running)
+let main : Task = Task::new(name="main", state=Running)
 
 ///|
 let curr : Ref[Task] = Ref::new(main)
@@ -112,16 +112,15 @@ pub fn Task::schedule(self : Task) -> Unit {
 
 ///|
 #callsite(autofill(loc))
-#as_free_fn(create)
-pub fn Task::new(
+pub fn launch(
   loc~ : SourceLoc,
   name? : String = loc.to_string(),
   stack_size? : UInt64 = 65536,
   f : () -> Unit,
-) -> Task {
+) -> Unit {
   let creator = curr.val
   let stack = Stack::new(stack_size)
-  let task = Task::raw(name~, state=Running, stack~)
+  let task = Task::new(name~, state=Running, stack~)
   creator.state = Yielded
   scheduler.schedule(creator)
   curr.val = task
@@ -143,16 +142,4 @@ pub fn Task::new(
   // Creator resumes here (via co_shift → co_reset restore).
   // Set current to ourselves — same logic as after co_shift in park().
   curr.val = creator
-  task
-}
-
-///|
-#callsite(autofill(loc))
-pub fn launch(
-  loc~ : SourceLoc,
-  name? : String,
-  stack_size? : UInt64,
-  f : () -> Unit,
-) -> Unit {
-  ignore(create(loc~, name?, stack_size?, f))
 }

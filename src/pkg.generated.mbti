@@ -20,9 +20,6 @@ pub fn[T] Future::wait(Self[T]) -> T
 
 type Task
 pub fn Task::current() -> Self
-#as_free_fn(create)
-#callsite(autofill(loc))
-pub fn Task::new(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Self
 pub fn Task::schedule(Self) -> Unit
 pub fn Task::suspend() -> Unit
 
