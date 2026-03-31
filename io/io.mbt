@@ -12,24 +12,36 @@ suberror Errno {
   Errno(Int)
 }
 
+priv enum Params {
+  Open(path~ : Bytes, flags : FixedArray[Byte])
+}
+
+struct Request {
+  params : Params
+  value : Ref[UInt64]
+  error : Ref[Int]
+  task : @co.Task
+}
+
 ///|
-#owned(io, path, value, error, task)
+#borrow(io, flags)
+#owned(value, error, task)
 extern "c" fn submit_open(
   io : Io,
   path : Bytes,
-  flags : Int,
-  mode : Int,
+  flags : FixedArray[Byte],
   value : Ref[UInt64],
   error : Ref[Int],
   task : @co.Task,
 ) = "moonbit_co_io_submit_open"
 
 ///|
-#owned(io, bytes, value, error, task)
+#owned(io, buffer, value, error, task)
 extern "c" fn submit_read(
   io : Io,
   handle : UInt64,
-  bytes : Bytes,
+  buffer : FixedArray[Byte],
+  offset : Int,
   length : Int,
   value : Ref[UInt64],
   error : Ref[Int],
@@ -37,11 +49,12 @@ extern "c" fn submit_read(
 ) = "moonbit_co_io_submit_read"
 
 ///|
-#owned(io, bytes, value, error, task)
+#owned(io, buffer, value, error, task)
 extern "c" fn submit_write(
   io : Io,
   handle : UInt64,
-  bytes : Bytes,
+  buffer : Bytes,
+  offset : Int,
   length : Int,
   value : Ref[UInt64],
   error : Ref[Int],
@@ -71,7 +84,7 @@ extern "c" fn io_poll(
 let max_completions : Int = 256
 
 ///|
-let ring : Io = Io::new()
+let io : Io = Io::new()
 
 ///|
 let poll_tasks : FixedArray[@co.Task] = FixedArray::make(
@@ -82,17 +95,33 @@ let poll_tasks : FixedArray[@co.Task] = FixedArray::make(
 ///|
 pub fn suspend() -> Unit {
   let length = Ref::new(max_completions)
-  io_poll(ring, poll_tasks, length, -1)
+  io_poll(io, poll_tasks, length, -1)
   for i in 0..<length.val {
     poll_tasks[i].schedule()
   }
 }
 
 ///|
-pub fn open(path : Bytes, flags : Int, mode : Int) -> Handle raise Errno {
+pub fn open(
+  path : Bytes,
+  read? : Bool = true,
+  write? : Bool = false,
+  append? : Bool = false,
+  create? : Bool = false,
+  truncate? : Bool = false,
+  exclusive? : Bool = false,
+) -> Handle raise Errno {
   let value = Ref::new(0UL)
   let error = Ref::new(0)
-  submit_open(ring, path, flags, mode, value, error, @co.Task::current())
+  let flags : FixedArray[Byte] = [
+    read.to_int().to_byte(),
+    write.to_int().to_byte(),
+    append.to_int().to_byte(),
+    create.to_int().to_byte(),
+    truncate.to_int().to_byte(),
+    exclusive.to_int().to_byte(),
+  ]
+  submit_open(io, path, flags, value, error, @co.Task::current())
   @co.Task::suspend()
   if error.val != 0 {
     raise Errno(error.val)
@@ -101,10 +130,24 @@ pub fn open(path : Bytes, flags : Int, mode : Int) -> Handle raise Errno {
 }
 
 ///|
-pub fn read(handle : Handle, bytes : Bytes, length : Int) -> Int raise Errno {
+pub fn read(
+  handle : Handle,
+  buffer : FixedArray[Byte],
+  offset? : Int = 0,
+  length? : Int = buffer.length() - offset,
+) -> Int raise Errno {
   let value = Ref::new(0UL)
   let error = Ref::new(0)
-  submit_read(ring, handle.0, bytes, length, value, error, @co.Task::current())
+  submit_read(
+    io,
+    handle.0,
+    buffer,
+    offset,
+    length,
+    value,
+    error,
+    @co.Task::current(),
+  )
   @co.Task::suspend()
   if error.val != 0 {
     raise Errno(error.val)
@@ -113,10 +156,24 @@ pub fn read(handle : Handle, bytes : Bytes, length : Int) -> Int raise Errno {
 }
 
 ///|
-pub fn write(handle : Handle, bytes : Bytes, length : Int) -> Int raise Errno {
+pub fn write(
+  handle : Handle,
+  buffer : Bytes,
+  offset? : Int = 0,
+  length? : Int = buffer.length() - offset,
+) -> Int raise Errno {
   let value = Ref::new(0UL)
   let error = Ref::new(0)
-  submit_write(ring, handle.0, bytes, length, value, error, @co.Task::current())
+  submit_write(
+    io,
+    handle.0,
+    buffer,
+    offset,
+    length,
+    value,
+    error,
+    @co.Task::current(),
+  )
   @co.Task::suspend()
   if error.val != 0 {
     raise Errno(error.val)
@@ -128,7 +185,7 @@ pub fn write(handle : Handle, bytes : Bytes, length : Int) -> Int raise Errno {
 pub fn close(handle : Handle) -> Unit raise Errno {
   let value = Ref::new(0UL)
   let error = Ref::new(0)
-  submit_close(ring, handle.0, value, error, @co.Task::current())
+  submit_close(io, handle.0, value, error, @co.Task::current())
   @co.Task::suspend()
   if error.val != 0 {
     raise Errno(error.val)

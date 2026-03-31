@@ -1,67 +1,78 @@
 ///|
 test "open and close" {
   let path = b"/tmp/co-io-test-open\x00"
-  let fd = @io.open(path, 64 | 1 | 512, 0o644) // O_CREAT | O_WRONLY | O_TRUNC
+  let fd = @io.open(path, write=true, create=true, truncate=true)
   @io.close(fd)
 }
 
 ///|
 test "write and read" {
   let path = b"/tmp/co-io-test-rw\x00"
-  let fd = @io.open(path, 64 | 1 | 512, 0o644)
-  let data = b"hello, io_uring!"
-  let written = @io.write(fd, data, data.length())
-  assert_eq(written, data.length())
+  let fd = @io.open(path, read=false, write=true, create=true, truncate=true)
+  let src = b"hello, io_uring!"
+  let written = @io.write(fd, src)
+  assert_eq(written, src.length())
   @io.close(fd)
-  let fd = @io.open(path, 0, 0) // O_RDONLY
-  let buf = Bytes::make(64, 0)
-  let n = @io.read(fd, buf, 64)
+  let fd = @io.open(path)
+  let buf = FixedArray::make(64, b'\x00')
+  let n = @io.read(fd, buf)
   @io.close(fd)
-  assert_eq(n, data.length())
-  for i in 0..<n {
-    assert_eq(buf[i], data[i])
-  }
+  assert_eq(n, src.length())
+  let dst = buf.unsafe_reinterpret_as_bytes()
+  assert_eq(dst[:n], src[:n])
 }
 
 ///|
 test "concurrent IO" {
   let path = b"/tmp/co-io-test-concurrent\x00"
-  let fd = @io.open(path, 64 | 1 | 512, 0o644)
-  let data = b"concurrent test"
-  let _ = @io.write(fd, data, data.length())
+  let fd = @io.open(path, read=false, write=true, create=true, truncate=true)
+  let src = b"concurrent test"
+  let _ = @io.write(fd, src)
   @io.close(fd)
-  let f1 : @co.Future[Int] = @co.Future::new()
-  let f2 : @co.Future[Int] = @co.Future::new()
-  let _ = @co.Task::new(name="reader1", fn() {
-    let fd = @io.open(path, 0, 0) catch { _ => abort("open failed") }
-    let buf = Bytes::make(64, 0)
-    let n = @io.read(fd, buf, 64) catch { _ => abort("read failed") }
-    @io.close(fd) catch {
-      _ => abort("close failed")
-    }
-    f1.set(n)
+  let f1 = @co.Promise::new()
+  let f2 = @co.Promise::new()
+  let buf1 = FixedArray::make(64, b'\x00')
+  let buf2 = FixedArray::make(64, b'\x00')
+  let _ = @co.Task::new(() => {
+    f1.set(
+      try? ({
+        let fd = @io.open(path)
+        try @io.read(fd, buf1) catch {
+          error => {
+            @io.close(fd)
+            raise error
+          }
+        } noraise {
+          n => n
+        }
+      }),
+    )
   })
-  let _ = @co.Task::new(name="reader2", fn() {
-    let fd = @io.open(path, 0, 0) catch { _ => abort("open failed") }
-    let buf = Bytes::make(64, 0)
-    let n = @io.read(fd, buf, 64) catch { _ => abort("read failed") }
-    @io.close(fd) catch {
-      _ => abort("close failed")
-    }
-    f2.set(n)
+  let _ = @co.Task::new(() => {
+    f2.set(
+      try? ({
+        let fd = @io.open(path)
+        try @io.read(fd, buf2) catch {
+          error => {
+            @io.close(fd)
+            raise error
+          }
+        } noraise {
+          n => n
+        }
+      }),
+    )
   })
-  assert_eq(f1.wait(), data.length())
-  assert_eq(f2.wait(), data.length())
+  let n1 = f1.wait()
+  let n2 = f2.wait()
+  assert_eq(n1, src.length())
+  assert_eq(n2, src.length())
+  assert_eq(buf1[:n1], buf2[:n2])
 }
 
 ///|
 test "open non-existent file" {
   let path = b"/tmp/co-io-test-nonexistent-file-that-should-not-exist\x00"
-  let result = try {
-    let _ = @io.open(path, 0, 0)
-    Ok(())
-  } catch {
-    _ => Err(())
-  }
-  assert_eq(result, Err(()))
+  let result = try? @io.open(path)
+  assert_true(result is Err(_))
 }

@@ -62,14 +62,15 @@ void
 moonbit_co_io_submit_open(
   struct moonbit_co_io *io,
   const char *path,
-  int32_t flags,
-  int32_t mode,
+  const uint8_t *flags,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
+  int posix_flags = decode_open_flags(flags);
+  int mode = (posix_flags & O_CREAT) ? 0666 : 0;
   dispatch_async(io->queue, ^{
-    int fd = open(path, flags, mode);
+    int fd = open(path, posix_flags, mode);
     if (fd < 0) {
       *value = 0;
       *error = errno;
@@ -79,6 +80,7 @@ moonbit_co_io_submit_open(
     }
     moonbit_decref(io);
     moonbit_decref((void *)path);
+    moonbit_decref((void *)flags);
     moonbit_decref(value);
     moonbit_decref(error);
     push_completion(io, task);
@@ -90,14 +92,15 @@ void
 moonbit_co_io_submit_read(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
   dispatch_async(io->queue, ^{
-    ssize_t n = read((int)handle, bytes, length);
+    ssize_t n = read((int)handle, (uint8_t *)buffer + offset, length);
     if (n < 0) {
       *value = 0;
       *error = errno;
@@ -106,7 +109,6 @@ moonbit_co_io_submit_read(
       *error = 0;
     }
     moonbit_decref(io);
-    moonbit_decref(bytes);
     moonbit_decref(value);
     moonbit_decref(error);
     push_completion(io, task);
@@ -118,14 +120,15 @@ void
 moonbit_co_io_submit_write(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  const void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
   dispatch_async(io->queue, ^{
-    ssize_t n = write((int)handle, bytes, length);
+    ssize_t n = write((int)handle, (const uint8_t *)buffer + offset, length);
     if (n < 0) {
       *value = 0;
       *error = errno;
@@ -134,7 +137,6 @@ moonbit_co_io_submit_write(
       *error = 0;
     }
     moonbit_decref(io);
-    moonbit_decref(bytes);
     moonbit_decref(value);
     moonbit_decref(error);
     push_completion(io, task);

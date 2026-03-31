@@ -189,32 +189,33 @@ void
 moonbit_co_io_submit_open(
   struct moonbit_co_io *io,
   const char *path,
-  int32_t flags,
-  int32_t mode,
+  const uint8_t *flags,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
+  int posix_flags = decode_open_flags(flags);
+  int mode = (posix_flags & O_CREAT) ? 0666 : 0;
   uint32_t slot;
   struct io_uring_sqe *sqe = get_sqe(io, &slot);
   sqe->opcode = IORING_OP_OPENAT;
   sqe->fd = AT_FDCWD;
   sqe->addr = (uint64_t)(uintptr_t)path;
   sqe->len = (uint32_t)mode;
-  sqe->open_flags = (uint32_t)flags;
+  sqe->open_flags = (uint32_t)posix_flags;
   sqe->user_data = slot;
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
   moonbit_decref(io);
-  moonbit_decref((void *)path);
 }
 
 void
 moonbit_co_io_submit_read(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
@@ -224,7 +225,7 @@ moonbit_co_io_submit_read(
   struct io_uring_sqe *sqe = get_sqe(io, &slot);
   sqe->opcode = IORING_OP_READ;
   sqe->fd = (int32_t)handle;
-  sqe->addr = (uint64_t)(uintptr_t)bytes;
+  sqe->addr = (uint64_t)(uintptr_t)((uint8_t *)buffer + offset);
   sqe->len = (uint32_t)length;
   sqe->off = (uint64_t)-1; // use current file offset
   sqe->user_data = slot;
@@ -232,14 +233,14 @@ moonbit_co_io_submit_read(
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
   moonbit_decref(io);
-  moonbit_decref(bytes);
 }
 
 void
 moonbit_co_io_submit_write(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  const void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
@@ -249,7 +250,7 @@ moonbit_co_io_submit_write(
   struct io_uring_sqe *sqe = get_sqe(io, &slot);
   sqe->opcode = IORING_OP_WRITE;
   sqe->fd = (int32_t)handle;
-  sqe->addr = (uint64_t)(uintptr_t)bytes;
+  sqe->addr = (uint64_t)(uintptr_t)((const uint8_t *)buffer + offset);
   sqe->len = (uint32_t)length;
   sqe->off = (uint64_t)-1; // use current file offset
   sqe->user_data = slot;
@@ -257,7 +258,6 @@ moonbit_co_io_submit_write(
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
   moonbit_decref(io);
-  moonbit_decref(bytes);
 }
 
 void
