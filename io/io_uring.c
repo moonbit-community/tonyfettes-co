@@ -1,3 +1,4 @@
+#if defined(__linux__)
 #include <moonbit.h>
 
 #include <errno.h>
@@ -330,3 +331,4 @@ moonbit_co_io_poll(
 
   *count = n;
 }
+#endif // __linux__

@@ -1,3 +1,4 @@
+#if defined(__APPLE__)
 #include <moonbit.h>
 
 #include <dispatch/dispatch.h>
@@ -40,8 +41,7 @@ moonbit_co_io_create(void) {
       moonbit_co_io_finalize, sizeof(struct moonbit_co_io)
     );
   memset(io, 0, sizeof(*io));
-  io->queue =
-    dispatch_queue_create("co.io", DISPATCH_QUEUE_CONCURRENT);
+  io->queue = dispatch_queue_create("co.io", DISPATCH_QUEUE_CONCURRENT);
   io->sem = dispatch_semaphore_create(0);
   return io;
 }
@@ -50,8 +50,7 @@ moonbit_co_io_create(void) {
 
 static void
 push_completion(struct moonbit_co_io *io, void *task) {
-  uint32_t tail =
-    atomic_load_explicit(&io->cq_tail, memory_order_relaxed);
+  uint32_t tail = atomic_load_explicit(&io->cq_tail, memory_order_relaxed);
   io->completions[tail & 255].task = task;
   atomic_store_explicit(&io->cq_tail, tail + 1, memory_order_release);
   dispatch_semaphore_signal(io->sem);
@@ -178,10 +177,8 @@ moonbit_co_io_poll(
   // Block until at least one completion
   dispatch_semaphore_wait(io->sem, DISPATCH_TIME_FOREVER);
 
-  uint32_t head =
-    atomic_load_explicit(&io->cq_head, memory_order_relaxed);
-  uint32_t tail =
-    atomic_load_explicit(&io->cq_tail, memory_order_acquire);
+  uint32_t head = atomic_load_explicit(&io->cq_head, memory_order_relaxed);
+  uint32_t tail = atomic_load_explicit(&io->cq_tail, memory_order_acquire);
   int32_t max = *count;
   int32_t n = 0;
 
@@ -197,3 +194,5 @@ moonbit_co_io_poll(
   atomic_store_explicit(&io->cq_head, head, memory_order_release);
   *count = n;
 }
+
+#endif // __APPLE__
