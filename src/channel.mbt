@@ -6,7 +6,7 @@ struct Channel[T] {
 
 ///|
 pub fn[T] Channel::new() -> Channel[T] {
-  Channel::{ values: @deque.Deque::new(), readers: @deque.Deque::new() }
+  Channel::{ values: @deque.Deque([]), readers: @deque.Deque([]) }
 }
 
 ///|

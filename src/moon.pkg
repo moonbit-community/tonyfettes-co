@@ -3,6 +3,10 @@ import {
   "tonyfettes/co/runtime",
 }
 
+import {
+  "moonbitlang/core/test",
+} for "test"
+
 options(
   "native-stub": [ "co.c" ],
   overrides: [ "tonyfettes/co/runtime/abort" ],
