@@ -29,7 +29,17 @@ priv enum State {
   Scheduled
   Suspended
   Stopped
-} derive(Show)
+}
+
+///|
+fn State::to_string(self : State) -> String {
+  match self {
+    Running => "Running"
+    Scheduled => "Scheduled"
+    Suspended => "Suspended"
+    Stopped => "Stopped"
+  }
+}
 
 ///|
 struct Task {
@@ -53,17 +63,19 @@ priv struct Scheduler {
 ///|
 fn Scheduler::new() -> Scheduler {
   let main = Task::raw(name="main", state=Running)
-  Scheduler::{ curr: Ref::new(main), ready: @deque.Deque::new() }
+  Scheduler::{ curr: Ref(main), ready: @deque.Deque([]) }
 }
 
 ///|
 /// Pick the next ready coroutine, polling the runtime if none are available.
 fn Scheduler::next(self : Scheduler) -> Task {
-  loop self.ready.pop_front() {
-    Some(next) => next
-    None => {
-      @runtime.suspend()
-      continue self.ready.pop_front()
+  for candidate = self.ready.pop_front() {
+    match candidate {
+      Some(next) => break next
+      None => {
+        @runtime.suspend()
+        continue self.ready.pop_front()
+      }
     }
   }
 }
@@ -130,7 +142,7 @@ pub fn Task::new(
     f()
     guard task.state is Running else {
       abort(
-        "@tonyfettes/co: coroutine \{task.name} not Running at completion (\{task.state})",
+        "@tonyfettes/co: coroutine \{task.name} not Running at completion (\{task.state.to_string()})",
       )
     }
     task.state = Stopped
