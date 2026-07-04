@@ -18,7 +18,7 @@ priv enum Params {
 }
 
 ///|
-struct Request {
+priv struct Request {
   params : Params
   value : Ref[UInt64]
   error : Ref[Int]
@@ -38,7 +38,8 @@ extern "c" fn submit_open(
 ) = "moonbit_co_io_submit_open"
 
 ///|
-#owned(io, buffer, value, error, task)
+#borrow(buffer)
+#owned(io, value, error, task)
 extern "c" fn submit_read(
   io : Io,
   handle : UInt64,
@@ -51,7 +52,8 @@ extern "c" fn submit_read(
 ) = "moonbit_co_io_submit_read"
 
 ///|
-#owned(io, buffer, value, error, task)
+#borrow(buffer)
+#owned(io, value, error, task)
 extern "c" fn submit_write(
   io : Io,
   handle : UInt64,
@@ -81,6 +83,12 @@ extern "c" fn io_poll(
   length : Ref[Int],
   timeout : Int64,
 ) = "moonbit_co_io_poll"
+
+///|
+/// POSIX `EINVAL`, raised for out-of-range offset/length arguments before they
+/// reach the native backends (where a negative length would be reinterpreted as
+/// a huge unsigned size).
+const EINVAL : Int = 22
 
 ///|
 let max_completions : Int = 256
@@ -138,6 +146,9 @@ pub fn read(
   offset? : Int = 0,
   length? : Int = buffer.length() - offset,
 ) -> Int raise Errno {
+  guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
+    raise Errno(EINVAL)
+  }
   let value = Ref::new(0UL)
   let error = Ref::new(0)
   submit_read(
@@ -164,6 +175,9 @@ pub fn write(
   offset? : Int = 0,
   length? : Int = buffer.length() - offset,
 ) -> Int raise Errno {
+  guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
+    raise Errno(EINVAL)
+  }
   let value = Ref::new(0UL)
   let error = Ref::new(0)
   submit_write(

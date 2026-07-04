@@ -71,6 +71,25 @@ test "concurrent IO" {
 }
 
 ///|
+test "read rejects out-of-range offset" {
+  let path = b"/tmp/co-io-test-badoffset\x00"
+  let fd = @io.open(path, write=true, create=true, truncate=true)
+  @io.close(fd)
+  let fd = @io.open(path)
+  let buf = FixedArray::make(8, b'\x00')
+  // offset past the end makes the default length negative; must be rejected
+  // before it reaches the native backend, not turned into a huge transfer.
+  let raised = try {
+    @io.read(fd, buf, offset=buf.length() + 1) |> ignore
+    false
+  } catch {
+    _ => true
+  }
+  @io.close(fd)
+  assert_true(raised)
+}
+
+///|
 test "open non-existent file" {
   let path = b"/tmp/co-io-test-nonexistent-file-that-should-not-exist\x00"
   let result = try? @io.open(path)

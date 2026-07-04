@@ -4,13 +4,13 @@ package "tonyfettes/co-io"
 // Values
 pub fn close(Handle) -> Unit raise Errno
 
-pub fn open(Bytes, Int, Int) -> Handle raise Errno
+pub fn open(Bytes, read? : Bool, write? : Bool, append? : Bool, create? : Bool, truncate? : Bool, exclusive? : Bool) -> Handle raise Errno
 
-pub fn read(Handle, Bytes, Int) -> Int raise Errno
+pub fn read(Handle, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise Errno
 
 pub fn suspend() -> Unit
 
-pub fn write(Handle, Bytes, Int) -> Int raise Errno
+pub fn write(Handle, Bytes, offset? : Int, length? : Int) -> Int raise Errno
 
 // Errors
 type Errno
@@ -21,3 +21,4 @@ type Handle
 // Type aliases
 
 // Traits
+
