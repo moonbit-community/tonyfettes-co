@@ -114,22 +114,29 @@ moonbit_co_stack_make(uint64_t size) {
 
 #endif
 
-extern void
-moonbit_co__shift(moonbit_co_context_t *from, moonbit_co_context_t *to);
+// The context-switch primitives are shipped as position-independent machine
+// code in an executable section (see co_asm_bytes.c) and called directly
+// through function pointers — no assembler or runtime JIT is involved.
+extern const unsigned char co_shift_code[];
+extern const unsigned char co_reset_code[];
 
-MOONBIT_FFI_EXPORT
-void
-moonbit_co_shift(moonbit_co_context_t *from, moonbit_co_context_t *to) {
-  moonbit_co__shift(from, to);
-}
+typedef void (*moonbit_co_shift_fn)(
+  moonbit_co_context_t *from,
+  moonbit_co_context_t *to
+);
 
-extern void
-moonbit_co__reset(
+typedef void (*moonbit_co_reset_fn)(
   moonbit_co_context_t *context,
   void *stack_top,
   moonbit_co_context_t *(*func)(void *),
   void *data
 );
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_shift(moonbit_co_context_t *from, moonbit_co_context_t *to) {
+  ((moonbit_co_shift_fn)(uintptr_t)co_shift_code)(from, to);
+}
 
 MOONBIT_FFI_EXPORT
 void
@@ -141,5 +148,5 @@ moonbit_co_reset(
 ) {
   uintptr_t sp = (uintptr_t)stack->base + stack->size;
   sp &= ~(uintptr_t)0xF;
-  moonbit_co__reset(context, (void *)sp, func, data);
+  ((moonbit_co_reset_fn)(uintptr_t)co_reset_code)(context, (void *)sp, func, data);
 }

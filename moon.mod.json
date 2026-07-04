@@ -10,6 +10,5 @@
   "keywords": [],
   "description": "",
   "source": "src",
-  "preferred-target": "native",
-  "--moonbit-unstable-prebuild": "prebuild.js"
+  "preferred-target": "native"
 }
