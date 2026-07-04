@@ -102,7 +102,7 @@ let poll_tasks : FixedArray[@co.Task] = FixedArray::make(
 
 ///|
 pub fn suspend() -> Unit {
-  let length = Ref::new(max_completions)
+  let length = Ref(max_completions)
   io_poll(io, poll_tasks, length, -1)
   for i in 0..<length.val {
     poll_tasks[i].schedule()
@@ -119,8 +119,8 @@ pub fn open(
   truncate? : Bool = false,
   exclusive? : Bool = false,
 ) -> Handle raise Errno {
-  let value = Ref::new(0UL)
-  let error = Ref::new(0)
+  let value = Ref(0UL)
+  let error = Ref(0)
   let flags : FixedArray[Byte] = [
     read.to_int().to_byte(),
     write.to_int().to_byte(),
@@ -147,8 +147,8 @@ pub fn read(
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
-  let value = Ref::new(0UL)
-  let error = Ref::new(0)
+  let value = Ref(0UL)
+  let error = Ref(0)
   submit_read(
     io,
     handle.0,
@@ -176,8 +176,8 @@ pub fn write(
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
-  let value = Ref::new(0UL)
-  let error = Ref::new(0)
+  let value = Ref(0UL)
+  let error = Ref(0)
   submit_write(
     io,
     handle.0,
@@ -197,8 +197,8 @@ pub fn write(
 
 ///|
 pub fn close(handle : Handle) -> Unit raise Errno {
-  let value = Ref::new(0UL)
-  let error = Ref::new(0)
+  let value = Ref(0UL)
+  let error = Ref(0)
   submit_close(io, handle.0, value, error, @co.Task::current())
   @co.Task::suspend()
   if error.val != 0 {
