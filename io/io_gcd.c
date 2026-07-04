@@ -79,8 +79,6 @@ moonbit_co_io_submit_open(
       *error = 0;
     }
     moonbit_decref(io);
-    moonbit_decref((void *)path);
-    moonbit_decref((void *)flags);
     moonbit_decref(value);
     moonbit_decref(error);
     push_completion(io, task);
