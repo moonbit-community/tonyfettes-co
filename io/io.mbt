@@ -12,10 +12,12 @@ suberror Errno {
   Errno(Int)
 }
 
+///|
 priv enum Params {
-  Open(path~ : Bytes, flags : FixedArray[Byte])
+  Open(path~ : Bytes, flags~ : FixedArray[Byte])
 }
 
+///|
 struct Request {
   params : Params
   value : Ref[UInt64]
@@ -25,7 +27,7 @@ struct Request {
 
 ///|
 #borrow(io, flags)
-#owned(value, error, task)
+#owned(path, value, error, task)
 extern "c" fn submit_open(
   io : Io,
   path : Bytes,
