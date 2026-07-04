@@ -173,11 +173,15 @@ async fn main {
   let buf = Buffer()
   buf.write_string_utf8(header)
 
-  // Guard order mirrors the arch macros used in co.c.
-  buf.write_string_utf8("\n#if defined(__x86_64__) && defined(_WIN32)\n")
+  // Guard order mirrors the arch macros used in co.c: MSVC defines `_M_X64`
+  // rather than `__x86_64__`, so both must be checked or Windows falls through
+  // to the #error below.
+  buf.write_string_utf8(
+    "\n#if (defined(__x86_64__) || defined(_M_X64)) && defined(_WIN32)\n",
+  )
   emit_array(buf, "co_shift_code", code("win64", "co_shift"))
   emit_array(buf, "co_reset_code", code("win64", "co_reset"))
-  buf.write_string_utf8("\n#elif defined(__x86_64__)\n")
+  buf.write_string_utf8("\n#elif defined(__x86_64__) || defined(_M_X64)\n")
   emit_array(buf, "co_shift_code", code("sysv", "co_shift"))
   emit_array(buf, "co_reset_code", code("sysv", "co_reset"))
   buf.write_string_utf8("\n#elif defined(__aarch64__)\n")
