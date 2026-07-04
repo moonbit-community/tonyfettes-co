@@ -13,19 +13,6 @@ suberror Errno {
 }
 
 ///|
-priv enum Params {
-  Open(path~ : Bytes, flags~ : FixedArray[Byte])
-}
-
-///|
-priv struct Request {
-  params : Params
-  value : Ref[UInt64]
-  error : Ref[Int]
-  task : @co.Task
-}
-
-///|
 #borrow(flags)
 #owned(io, path, value, error, task)
 extern "c" fn submit_open(
