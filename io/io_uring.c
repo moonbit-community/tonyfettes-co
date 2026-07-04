@@ -1,3 +1,4 @@
+#if defined(__linux__)
 #include <moonbit.h>
 
 #include <errno.h>
@@ -59,11 +60,15 @@ struct moonbit_co_io {
   // Pending submission count
   uint32_t sq_pending;
 
-  // Per-slot request state (value/error/task pointers)
+  // Per-slot request state (value/error/task pointers). `retain` holds an owned
+  // MoonBit object the kernel still accesses after submit returns (the open
+  // path, or the read/write buffer) so it is not freed before completion; NULL
+  // when there is nothing to retain.
   struct {
     uint64_t *value;
     int32_t *error;
     void *task;
+    void *retain;
   } reqs[256];
 };
 
@@ -188,32 +193,37 @@ void
 moonbit_co_io_submit_open(
   struct moonbit_co_io *io,
   const char *path,
-  int32_t flags,
-  int32_t mode,
+  const uint8_t *flags,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
+  int posix_flags = decode_open_flags(flags);
+  int mode = (posix_flags & O_CREAT) ? 0666 : 0;
   uint32_t slot;
   struct io_uring_sqe *sqe = get_sqe(io, &slot);
   sqe->opcode = IORING_OP_OPENAT;
   sqe->fd = AT_FDCWD;
   sqe->addr = (uint64_t)(uintptr_t)path;
   sqe->len = (uint32_t)mode;
-  sqe->open_flags = (uint32_t)flags;
+  sqe->open_flags = (uint32_t)posix_flags;
   sqe->user_data = slot;
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  // The kernel reads `path` when the OPENAT runs (after this returns), so keep
+  // it owned until the CQE is drained. `flags` was consumed synchronously by
+  // decode_open_flags above (borrowed, nothing to retain).
+  io->reqs[slot].retain = (void *)path;
   moonbit_decref(io);
-  moonbit_decref((void *)path);
 }
 
 void
 moonbit_co_io_submit_read(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
@@ -223,22 +233,24 @@ moonbit_co_io_submit_read(
   struct io_uring_sqe *sqe = get_sqe(io, &slot);
   sqe->opcode = IORING_OP_READ;
   sqe->fd = (int32_t)handle;
-  sqe->addr = (uint64_t)(uintptr_t)bytes;
+  sqe->addr = (uint64_t)(uintptr_t)((uint8_t *)buffer + offset);
   sqe->len = (uint32_t)length;
   sqe->off = (uint64_t)-1; // use current file offset
   sqe->user_data = slot;
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  // The kernel writes into `buffer` when the READ runs (after this returns).
+  io->reqs[slot].retain = buffer;
   moonbit_decref(io);
-  moonbit_decref(bytes);
 }
 
 void
 moonbit_co_io_submit_write(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  const void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
@@ -248,15 +260,16 @@ moonbit_co_io_submit_write(
   struct io_uring_sqe *sqe = get_sqe(io, &slot);
   sqe->opcode = IORING_OP_WRITE;
   sqe->fd = (int32_t)handle;
-  sqe->addr = (uint64_t)(uintptr_t)bytes;
+  sqe->addr = (uint64_t)(uintptr_t)((const uint8_t *)buffer + offset);
   sqe->len = (uint32_t)length;
   sqe->off = (uint64_t)-1; // use current file offset
   sqe->user_data = slot;
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  // The kernel reads from `buffer` when the WRITE runs (after this returns).
+  io->reqs[slot].retain = (void *)buffer;
   moonbit_decref(io);
-  moonbit_decref(bytes);
 }
 
 void
@@ -275,6 +288,7 @@ moonbit_co_io_submit_close(
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  io->reqs[slot].retain = NULL; // close has no payload to keep alive
   moonbit_decref(io);
 }
 
@@ -319,6 +333,8 @@ moonbit_co_io_poll(
     moonbit_decref(io->reqs[slot].error);
     tasks[n] = io->reqs[slot].task;
     moonbit_decref(io->reqs[slot].task);
+    if (io->reqs[slot].retain)
+      moonbit_decref(io->reqs[slot].retain);
 
     n++;
     head++;
@@ -330,3 +346,4 @@ moonbit_co_io_poll(
 
   *count = n;
 }
+#endif // __linux__

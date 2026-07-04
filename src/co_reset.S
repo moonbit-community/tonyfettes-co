@@ -26,6 +26,8 @@ FUNC_TYPE(SYMBOL(moonbit_co__reset))
 SYMBOL(moonbit_co__reset):
 
 #if defined(__x86_64__)
+  // CET landing pad for indirect calls into the embedded code blob
+  endbr64
 
 #ifdef _WIN32
   // Win64 ABI: rcx=ctx, rdx=stack_top, r8=func, r9=arg
@@ -126,6 +128,8 @@ SYMBOL(moonbit_co__reset):
 
 #elif defined(__aarch64__)
   // arm64: x0=ctx, x1=stack_top, x2=func, x3=arg
+  // BTI landing pad for indirect calls into the embedded code blob
+  bti c
 
   // Save callee-saved registers into ctx
   mov x9, sp

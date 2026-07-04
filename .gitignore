@@ -2,6 +2,7 @@
 _build/
 target
 .mooncakes/
+.repos/
 
 # macOS
 .DS_Store

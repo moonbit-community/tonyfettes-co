@@ -47,11 +47,22 @@ struct Task {
   mut state : State
   context : Context
   stack : Stack?
+  // The coroutine body. Held here so it stays alive for the whole lifetime of
+  // the task: `co_reset` returns to the creator on the *first suspend* (not just
+  // on completion), which would otherwise decref the only remaining reference to
+  // `f` — and with it any values `f` captured — while the coroutine is still
+  // suspended and about to resume. See Task::new.
+  func : (() -> Unit)?
 }
 
 ///|
-fn Task::raw(name~ : String, state~ : State, stack? : Stack) -> Task {
-  Task::{ name, state, context: Context::new(), stack }
+fn Task::raw(
+  name~ : String,
+  state~ : State,
+  stack? : Stack,
+  func? : () -> Unit,
+) -> Task {
+  Task::{ name, state, context: Context::new(), stack, func }
 }
 
 ///|
@@ -131,7 +142,7 @@ pub fn Task::new(
 ) -> Task {
   let creator = scheduler.curr.val
   let stack = Stack::new(stack_size)
-  let task = Task::raw(name~, state=Running, stack~)
+  let task = Task::raw(name~, state=Running, stack~, func=f)
   creator.state = Scheduled
   scheduler.schedule(creator)
   scheduler.curr.val = task
@@ -139,7 +150,13 @@ pub fn Task::new(
   // here because #borrow(stack) on co_reset keeps the `stack` parameter alive
   // across the call, preventing munmap even if `callee` is decreffed early.
   co_reset(creator.context, stack, f => f(), () => {
-    f()
+    // Run the body through the task, which owns it: the parameter `f` is
+    // decref'd when co_reset returns to the creator on the first suspend, so the
+    // task must be the reference that keeps the body (and its captures) alive.
+    guard task.func is Some(body) else {
+      abort("@tonyfettes/co: coroutine \{task.name} started with no body")
+    }
+    body()
     guard task.state is Running else {
       abort(
         "@tonyfettes/co: coroutine \{task.name} not Running at completion (\{task.state.to_string()})",

@@ -1,3 +1,4 @@
+#if defined(__APPLE__)
 #include <moonbit.h>
 
 #include <dispatch/dispatch.h>
@@ -40,8 +41,7 @@ moonbit_co_io_create(void) {
       moonbit_co_io_finalize, sizeof(struct moonbit_co_io)
     );
   memset(io, 0, sizeof(*io));
-  io->queue =
-    dispatch_queue_create("co.io", DISPATCH_QUEUE_CONCURRENT);
+  io->queue = dispatch_queue_create("co.io", DISPATCH_QUEUE_CONCURRENT);
   io->sem = dispatch_semaphore_create(0);
   return io;
 }
@@ -50,8 +50,7 @@ moonbit_co_io_create(void) {
 
 static void
 push_completion(struct moonbit_co_io *io, void *task) {
-  uint32_t tail =
-    atomic_load_explicit(&io->cq_tail, memory_order_relaxed);
+  uint32_t tail = atomic_load_explicit(&io->cq_tail, memory_order_relaxed);
   io->completions[tail & 255].task = task;
   atomic_store_explicit(&io->cq_tail, tail + 1, memory_order_release);
   dispatch_semaphore_signal(io->sem);
@@ -63,14 +62,15 @@ void
 moonbit_co_io_submit_open(
   struct moonbit_co_io *io,
   const char *path,
-  int32_t flags,
-  int32_t mode,
+  const uint8_t *flags,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
+  int posix_flags = decode_open_flags(flags);
+  int mode = (posix_flags & O_CREAT) ? 0666 : 0;
   dispatch_async(io->queue, ^{
-    int fd = open(path, flags, mode);
+    int fd = open(path, posix_flags, mode);
     if (fd < 0) {
       *value = 0;
       *error = errno;
@@ -79,9 +79,12 @@ moonbit_co_io_submit_open(
       *error = 0;
     }
     moonbit_decref(io);
-    moonbit_decref((void *)path);
     moonbit_decref(value);
     moonbit_decref(error);
+    // `path` is read by open() above, inside the async block, so it is kept
+    // owned until here. (`flags` was decoded synchronously before dispatch and
+    // is borrowed.)
+    moonbit_decref((void *)path);
     push_completion(io, task);
     moonbit_decref(task);
   });
@@ -91,14 +94,15 @@ void
 moonbit_co_io_submit_read(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
   dispatch_async(io->queue, ^{
-    ssize_t n = read((int)handle, bytes, length);
+    ssize_t n = read((int)handle, (uint8_t *)buffer + offset, length);
     if (n < 0) {
       *value = 0;
       *error = errno;
@@ -107,9 +111,11 @@ moonbit_co_io_submit_read(
       *error = 0;
     }
     moonbit_decref(io);
-    moonbit_decref(bytes);
     moonbit_decref(value);
     moonbit_decref(error);
+    // `buffer` is written by read() above, inside the async block; keep it owned
+    // until here.
+    moonbit_decref(buffer);
     push_completion(io, task);
     moonbit_decref(task);
   });
@@ -119,14 +125,15 @@ void
 moonbit_co_io_submit_write(
   struct moonbit_co_io *io,
   uint64_t handle,
-  void *bytes,
+  const void *buffer,
+  int32_t offset,
   int32_t length,
   uint64_t *value,
   int32_t *error,
   void *task
 ) {
   dispatch_async(io->queue, ^{
-    ssize_t n = write((int)handle, bytes, length);
+    ssize_t n = write((int)handle, (const uint8_t *)buffer + offset, length);
     if (n < 0) {
       *value = 0;
       *error = errno;
@@ -135,9 +142,11 @@ moonbit_co_io_submit_write(
       *error = 0;
     }
     moonbit_decref(io);
-    moonbit_decref(bytes);
     moonbit_decref(value);
     moonbit_decref(error);
+    // `buffer` is read by write() above, inside the async block; keep it owned
+    // until here.
+    moonbit_decref((void *)buffer);
     push_completion(io, task);
     moonbit_decref(task);
   });
@@ -178,10 +187,8 @@ moonbit_co_io_poll(
   // Block until at least one completion
   dispatch_semaphore_wait(io->sem, DISPATCH_TIME_FOREVER);
 
-  uint32_t head =
-    atomic_load_explicit(&io->cq_head, memory_order_relaxed);
-  uint32_t tail =
-    atomic_load_explicit(&io->cq_tail, memory_order_acquire);
+  uint32_t head = atomic_load_explicit(&io->cq_head, memory_order_relaxed);
+  uint32_t tail = atomic_load_explicit(&io->cq_tail, memory_order_acquire);
   int32_t max = *count;
   int32_t n = 0;
 
@@ -197,3 +204,5 @@ moonbit_co_io_poll(
   atomic_store_explicit(&io->cq_head, head, memory_order_release);
   *count = n;
 }
+
+#endif // __APPLE__
