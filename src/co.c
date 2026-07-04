@@ -138,6 +138,16 @@ moonbit_co_shift(moonbit_co_context_t *from, moonbit_co_context_t *to) {
   ((moonbit_co_shift_fn)(uintptr_t)co_shift_code)(from, to);
 }
 
+// Release one reference on a context. Every resume path (co_shift `to`, and the
+// context a coroutine returns from co_reset on completion) hands the resumed
+// task an owned +1 reference on its context so it stays alive across the switch;
+// the task drops that reference here once it is running again on its own stack.
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_context_release(moonbit_co_context_t *ctx) {
+  moonbit_decref(ctx);
+}
+
 MOONBIT_FFI_EXPORT
 void
 moonbit_co_reset(

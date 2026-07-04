@@ -5,8 +5,19 @@ priv type Context
 extern "c" fn Context::new() -> Context = "moonbit_co_context_make"
 
 ///|
-#borrow(from, to)
+// `to` is owned: the switch hands the resumed task a +1 reference on its own
+// context so it survives the switch even if the caller's reference to `to` is
+// its last one; the resumed task drops it via `Context::release` once awake.
+#borrow(from)
+#owned(to)
 extern "c" fn co_shift(from : Context, to : Context) = "moonbit_co_shift"
+
+///|
+/// Drop the +1 reference the switch handed us, now that we are running again on
+/// our own stack. Balances the owned `to` of `co_shift` and the context a
+/// coroutine returns from `co_reset` on completion.
+#borrow(self)
+extern "c" fn Context::release(self : Context) = "moonbit_co_context_release"
 
 ///|
 #borrow(context, stack, data)
@@ -116,10 +127,12 @@ pub fn Task::suspend() -> Unit {
   let next = scheduler.next()
   next.state = Running
   co_shift(prev.context, next.context)
-  // We just woke up — set current to ourselves.
-  // This is done AFTER co_shift (on our own stack) rather than BEFORE
-  // (on the switcher's stack), so that the decref of the old current.val
-  // never happens on a stack that's about to be freed.
+  // We just woke up. Drop the +1 reference the resume handed us (see co_shift).
+  // Done AFTER the switch, on our own stack.
+  prev.context.release()
+  // Set current to ourselves — also done AFTER co_shift (on our own stack)
+  // rather than BEFORE (on the switcher's stack), so that the decref of the old
+  // current.val never happens on a stack that's about to be freed.
   scheduler.curr.val = prev
   ignore(next.stack)
 }
@@ -167,8 +180,12 @@ pub fn Task::new(
     next.state = Running
     next.context
   })
-  // Creator resumes here (via co_shift → co_reset restore).
-  // Set current to ourselves — same logic as after co_shift in park().
+  // Creator resumes here (via co_shift → co_reset restore). Whether resumed by
+  // the coroutine's first suspend or by its completion returning creator.context
+  // from co_reset, that resume handed us a +1 reference — drop it, on our own
+  // stack, same as after co_shift in suspend().
+  creator.context.release()
+  // Set current to ourselves — same logic as after co_shift in suspend().
   scheduler.curr.val = creator
   task
 }
