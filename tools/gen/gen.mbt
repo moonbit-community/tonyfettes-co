@@ -1,22 +1,88 @@
 // Generator for src/co_asm_bytes.c.
 //
-// Reads the extracted `.text` blobs (produced by tools/gen.sh via clang +
-// llvm-objcopy) and emits the committed C file that embeds them in an
-// executable section. Run through tools/gen.sh, not directly.
-
-#borrow(path)
-extern "c" fn co_gen_read(path : Bytes) -> Bytes = "co_gen_read"
-
-#borrow(path, data)
-extern "c" fn co_gen_write(path : Bytes, data : Bytes) -> Unit = "co_gen_write"
+// Assembles the two context-switch primitives (src/co_shift.S, src/co_reset.S)
+// for each supported ABI, checks each object is relocation-free, extracts the
+// raw `.text` bytes, and emits the committed C file that embeds them in an
+// executable section (see co.c). No assembler or runtime JIT is needed by end
+// users — this is a maintainer-only step, run whenever the .S sources change.
+//
+// Usage: moon run . --target native -- <repo-root>
+//   CLANG / OBJCOPY env vars override the tool names (default clang /
+//   llvm-objcopy).
 
 ///|
-/// Build a NUL-terminated C string (as `Bytes`) from an ASCII path.
-fn cstr(s : String) -> Bytes {
-  let buf = Buffer()
-  buf.write_string_utf8(s)
-  buf.write_byte(b'\x00')
-  buf.to_bytes()
+suberror GenError {
+  GenError(String)
+}
+
+///|
+/// One assembly ABI: target triple + the CET/BTI landing-pad flag.
+struct Abi {
+  label : String
+  triple : String
+  flag : String
+}
+
+///|
+let abis : Array[Abi] = [
+  { label: "sysv", triple: "x86_64-linux-gnu", flag: "-fcf-protection=branch" },
+  {
+    label: "arm64",
+    triple: "aarch64-linux-gnu",
+    flag: "-mbranch-protection=bti",
+  },
+  {
+    label: "win64",
+    triple: "x86_64-windows-msvc",
+    flag: "-fcf-protection=branch",
+  },
+]
+
+///|
+/// Assemble `<root>/src/<func>.S` for `abi`, verify it is relocation-free, and
+/// return the raw `.text` bytes.
+async fn extract(
+  clang : String,
+  objcopy : String,
+  root : @path.Path,
+  work : @path.Path,
+  abi : Abi,
+  func : String,
+) -> Bytes {
+  let obj = work.join("\{abi.label}_\{func}.o")
+  let src = root.join("src").join("\{func}.S")
+  let rc = @process.run(clang, [
+    "--target=\{abi.triple}",
+    abi.flag,
+    "-c",
+    src.0,
+    "-o",
+    obj.0,
+  ])
+  guard rc == 0 else {
+    raise GenError("clang failed for \{func}.S (\{abi.label}), exit \{rc}")
+  }
+  // Guardrail: the blob must be relocation-free, or it cannot be placed in an
+  // arbitrary executable section. An absent `.rela.text` (objcopy exits
+  // non-zero, empty stdout) means no relocations — the expected case.
+  let (_, reloc, _) = @process.collect_output(objcopy, [
+    "--dump-section",
+    ".rela.text=/dev/stdout",
+    obj.0,
+  ])
+  guard reloc.binary().length() == 0 else {
+    raise GenError(
+      "\{func}.S (\{abi.label}) has .text relocations; blob approach invalid",
+    )
+  }
+  // --dump-section extracts exactly .text for ELF, COFF and Mach-O alike
+  // (-O binary is unreliable on COFF).
+  let bin = work.join("\{abi.label}_\{func}.bin")
+  let rc2 = @process.run(objcopy, ["--dump-section", ".text=\{bin.0}", obj.0])
+  guard rc2 == 0 else {
+    raise GenError("objcopy failed for \{func}.S (\{abi.label}), exit \{rc2}")
+  }
+  @fs.read_file(bin.0).binary()
 }
 
 ///|
@@ -62,7 +128,7 @@ let header : String =
   #| * and relocation-free, so the raw .text bytes are placed in an executable
   #| * section and called directly (see co.c) — no assembler or runtime JIT needed.
   #| *
-  #| * Regenerate with tools/gen.sh whenever the .S sources change.
+  #| * Regenerate with `moon run tools/gen` whenever the .S sources change.
   #| */
   #|
   #|#if defined(__APPLE__)
@@ -76,34 +142,47 @@ let header : String =
   #|
 
 ///|
-fn main {
-  let args = @env.args()
-  // Expect: <input-dir> <output-file>. args() excludes the program name on
-  // native, but tolerate a leading argv[0] just in case.
-  let (indir, outfile) = match args {
-    [dir, out] => (dir, out)
-    [_, dir, out] => (dir, out)
-    _ => {
-      println("usage: gen <input-dir> <output-file>")
-      panic()
+/// Look up an ABI by label; the three are known to exist.
+fn abi(label : String) -> Abi raise {
+  for a in abis {
+    if a.label == label {
+      return a
     }
   }
-  fn read_blob(variant : String, func : String) -> Bytes {
-    co_gen_read(cstr("\{indir}/\{variant}_\{func}.bin"))
+  raise GenError("unknown ABI \{label}")
+}
+
+///|
+async fn main {
+  // Expect: <repo-root>. args() excludes the program name on native, but
+  // tolerate a leading argv[0] just in case.
+  let root : @path.Path = match @env.args() {
+    [root] => @path.Path(root)
+    [_, root] => @path.Path(root)
+    _ => {
+      println("usage: moon run . --target native -- <repo-root>")
+      raise GenError("expected exactly one argument (repo root)")
+    }
+  }
+  let clang = @env.get_env_var("CLANG").unwrap_or("clang")
+  let objcopy = @env.get_env_var("OBJCOPY").unwrap_or("llvm-objcopy")
+  let work = @path.Path(@fs.tmpdir(prefix="co-gen"))
+  async fn code(label : String, func : String) -> Bytes {
+    extract(clang, objcopy, root, work, abi(label), func)
   }
   let buf = Buffer()
   buf.write_string_utf8(header)
 
   // Guard order mirrors the arch macros used in co.c.
   buf.write_string_utf8("\n#if defined(__x86_64__) && defined(_WIN32)\n")
-  emit_array(buf, "co_shift_code", read_blob("win64", "co_shift"))
-  emit_array(buf, "co_reset_code", read_blob("win64", "co_reset"))
+  emit_array(buf, "co_shift_code", code("win64", "co_shift"))
+  emit_array(buf, "co_reset_code", code("win64", "co_reset"))
   buf.write_string_utf8("\n#elif defined(__x86_64__)\n")
-  emit_array(buf, "co_shift_code", read_blob("sysv", "co_shift"))
-  emit_array(buf, "co_reset_code", read_blob("sysv", "co_reset"))
+  emit_array(buf, "co_shift_code", code("sysv", "co_shift"))
+  emit_array(buf, "co_reset_code", code("sysv", "co_reset"))
   buf.write_string_utf8("\n#elif defined(__aarch64__)\n")
-  emit_array(buf, "co_shift_code", read_blob("arm64", "co_shift"))
-  emit_array(buf, "co_reset_code", read_blob("arm64", "co_reset"))
+  emit_array(buf, "co_shift_code", code("arm64", "co_shift"))
+  emit_array(buf, "co_reset_code", code("arm64", "co_reset"))
   buf.write_string_utf8(
     (
       #|
@@ -113,6 +192,8 @@ fn main {
       #|
     ),
   )
-  co_gen_write(cstr(outfile), buf.to_bytes())
-  println("co-gen: wrote \{outfile}")
+  let outfile = root.join("src").join("co_asm_bytes.c")
+  @fs.write_file(outfile.0, buf.to_bytes(), create_mode=CreateOrTruncate)
+  @fs.rmdir(work.0, recursive=true)
+  println("co-gen: wrote \{outfile.0}")
 }

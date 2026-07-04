@@ -5,7 +5,7 @@
  * and relocation-free, so the raw .text bytes are placed in an executable
  * section and called directly (see co.c) — no assembler or runtime JIT needed.
  *
- * Regenerate with tools/gen.sh whenever the .S sources change.
+ * Regenerate with `moon run tools/gen` whenever the .S sources change.
  */
 
 #if defined(__APPLE__)

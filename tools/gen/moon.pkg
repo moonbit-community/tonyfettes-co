@@ -1,8 +1,13 @@
 import {
   "moonbitlang/core/env",
+  "moonbitlang/async",
+  "moonbitlang/async/fs",
+  "moonbitlang/async/process",
+  "moonbitlang/x/path",
 }
+
+supported_targets = "+native"
 
 options(
   "is-main": true,
-  "native-stub": [ "gen.c" ],
 )
