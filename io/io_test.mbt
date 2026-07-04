@@ -34,40 +34,47 @@ test "concurrent IO" {
   let buf1 = FixedArray::make(64, b'\x00')
   let buf2 = FixedArray::make(64, b'\x00')
   let _ = @co.Task::new(() => {
-    f1.set(
-      try? ({
-        let fd = @io.open(path)
-        try @io.read(fd, buf1) catch {
-          error => {
-            @io.close(fd)
-            raise error
-          }
-        } noraise {
-          n => n
+    let fd = @io.open(path) catch {
+      error => {
+        f1.reject(error)
+        return
+      }
+    }
+    try @io.read(fd, buf1) catch {
+      error => {
+        @io.close(fd) catch {
+          _ => ()
         }
-      }),
-    )
+        f1.reject(error)
+        return
+      }
+    } noraise {
+      n => f1.resolve(n)
+    }
   })
   let _ = @co.Task::new(() => {
-    f2.set(
-      try? ({
-        let fd = @io.open(path)
-        try @io.read(fd, buf2) catch {
-          error => {
-            @io.close(fd)
-            raise error
-          }
-        } noraise {
-          n => n
+    let fd = @io.open(path) catch {
+      error => {
+        f2.reject(error)
+        return
+      }
+    }
+    try @io.read(fd, buf2) catch {
+      error => {
+        @io.close(fd) catch {
+          _ => ()
         }
-      }),
-    )
+        f2.reject(error)
+      }
+    } noraise {
+      n => f2.resolve(n)
+    }
   })
   let n1 = f1.wait()
   let n2 = f2.wait()
   assert_eq(n1, src.length())
   assert_eq(n2, src.length())
-  assert_eq(buf1[:n1], buf2[:n2])
+  @debug.assert_eq(buf1[:n1], buf2[:n2])
 }
 
 ///|
@@ -107,6 +114,5 @@ test "read rejects out-of-range offset" {
 ///|
 test "open non-existent file" {
   let path = b"/tmp/co-io-test-nonexistent-file-that-should-not-exist\x00"
-  let result = try? @io.open(path)
-  assert_true(result is Err(_))
+  assert_true(@test.expect_error(() => @io.open(path)) is @io.Errno(_))
 }

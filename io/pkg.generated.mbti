@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "tonyfettes/co-io"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub fn close(Handle) -> Unit raise Errno
 
@@ -13,7 +17,9 @@ pub fn suspend() -> Unit
 pub fn write(Handle, Bytes, offset? : Int, length? : Int) -> Int raise Errno
 
 // Errors
-type Errno
+pub(all) suberror Errno {
+  Errno(Int)
+} derive(@debug.Debug)
 
 // Types and methods
 type Handle

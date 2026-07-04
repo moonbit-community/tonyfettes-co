@@ -4,6 +4,8 @@ import {
 
 import {
   "tonyfettes/co-io" @io,
+  "moonbitlang/core/test",
+  "moonbitlang/core/debug",
 } for "test"
 
 options(

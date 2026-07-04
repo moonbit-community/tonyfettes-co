@@ -8,9 +8,9 @@ priv type Io
 extern "c" fn Io::new() -> Io = "moonbit_co_io_create"
 
 ///|
-suberror Errno {
+pub(all) suberror Errno {
   Errno(Int)
-}
+} derive(Debug)
 
 ///|
 #borrow(flags)
