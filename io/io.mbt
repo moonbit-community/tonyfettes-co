@@ -26,8 +26,8 @@ struct Request {
 }
 
 ///|
-#borrow(io, flags)
-#owned(path, value, error, task)
+#borrow(flags)
+#owned(io, path, value, error, task)
 extern "c" fn submit_open(
   io : Io,
   path : Bytes,
