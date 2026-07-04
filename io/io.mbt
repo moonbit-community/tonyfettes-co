@@ -26,8 +26,8 @@ priv struct Request {
 }
 
 ///|
-#borrow(path, flags)
-#owned(io, value, error, task)
+#borrow(flags)
+#owned(io, path, value, error, task)
 extern "c" fn submit_open(
   io : Io,
   path : Bytes,
@@ -38,8 +38,7 @@ extern "c" fn submit_open(
 ) = "moonbit_co_io_submit_open"
 
 ///|
-#borrow(buffer)
-#owned(io, value, error, task)
+#owned(io, buffer, value, error, task)
 extern "c" fn submit_read(
   io : Io,
   handle : UInt64,
@@ -52,8 +51,7 @@ extern "c" fn submit_read(
 ) = "moonbit_co_io_submit_read"
 
 ///|
-#borrow(buffer)
-#owned(io, value, error, task)
+#owned(io, buffer, value, error, task)
 extern "c" fn submit_write(
   io : Io,
   handle : UInt64,

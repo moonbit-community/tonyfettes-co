@@ -71,6 +71,21 @@ test "concurrent IO" {
 }
 
 ///|
+test "read into a buffer with no surviving reference" {
+  let path = b"/tmp/co-io-test-temp-buf\x00"
+  let fd = @io.open(path, write=true, create=true, truncate=true)
+  let _ = @io.write(fd, b"payload")
+  @io.close(fd)
+  let fd = @io.open(path)
+  // The buffer is a temporary with no binding outliving the call. If the FFI
+  // only borrowed it, MoonBit would free it right after submit_read and the
+  // kernel would write into freed memory during io_poll (ASan-detectable UAF).
+  let n = @io.read(fd, FixedArray::make(64, b'\x00'))
+  @io.close(fd)
+  assert_eq(n, 7)
+}
+
+///|
 test "read rejects out-of-range offset" {
   let path = b"/tmp/co-io-test-badoffset\x00"
   let fd = @io.open(path, write=true, create=true, truncate=true)

@@ -81,6 +81,10 @@ moonbit_co_io_submit_open(
     moonbit_decref(io);
     moonbit_decref(value);
     moonbit_decref(error);
+    // `path` is read by open() above, inside the async block, so it is kept
+    // owned until here. (`flags` was decoded synchronously before dispatch and
+    // is borrowed.)
+    moonbit_decref((void *)path);
     push_completion(io, task);
     moonbit_decref(task);
   });
@@ -109,6 +113,9 @@ moonbit_co_io_submit_read(
     moonbit_decref(io);
     moonbit_decref(value);
     moonbit_decref(error);
+    // `buffer` is written by read() above, inside the async block; keep it owned
+    // until here.
+    moonbit_decref(buffer);
     push_completion(io, task);
     moonbit_decref(task);
   });
@@ -137,6 +144,9 @@ moonbit_co_io_submit_write(
     moonbit_decref(io);
     moonbit_decref(value);
     moonbit_decref(error);
+    // `buffer` is read by write() above, inside the async block; keep it owned
+    // until here.
+    moonbit_decref((void *)buffer);
     push_completion(io, task);
     moonbit_decref(task);
   });

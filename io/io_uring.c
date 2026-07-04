@@ -60,11 +60,15 @@ struct moonbit_co_io {
   // Pending submission count
   uint32_t sq_pending;
 
-  // Per-slot request state (value/error/task pointers)
+  // Per-slot request state (value/error/task pointers). `retain` holds an owned
+  // MoonBit object the kernel still accesses after submit returns (the open
+  // path, or the read/write buffer) so it is not freed before completion; NULL
+  // when there is nothing to retain.
   struct {
     uint64_t *value;
     int32_t *error;
     void *task;
+    void *retain;
   } reqs[256];
 };
 
@@ -207,6 +211,10 @@ moonbit_co_io_submit_open(
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  // The kernel reads `path` when the OPENAT runs (after this returns), so keep
+  // it owned until the CQE is drained. `flags` was consumed synchronously by
+  // decode_open_flags above (borrowed, nothing to retain).
+  io->reqs[slot].retain = (void *)path;
   moonbit_decref(io);
 }
 
@@ -232,6 +240,8 @@ moonbit_co_io_submit_read(
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  // The kernel writes into `buffer` when the READ runs (after this returns).
+  io->reqs[slot].retain = buffer;
   moonbit_decref(io);
 }
 
@@ -257,6 +267,8 @@ moonbit_co_io_submit_write(
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  // The kernel reads from `buffer` when the WRITE runs (after this returns).
+  io->reqs[slot].retain = (void *)buffer;
   moonbit_decref(io);
 }
 
@@ -276,6 +288,7 @@ moonbit_co_io_submit_close(
   io->reqs[slot].value = value;
   io->reqs[slot].error = error;
   io->reqs[slot].task = task;
+  io->reqs[slot].retain = NULL; // close has no payload to keep alive
   moonbit_decref(io);
 }
 
@@ -320,6 +333,8 @@ moonbit_co_io_poll(
     moonbit_decref(io->reqs[slot].error);
     tasks[n] = io->reqs[slot].task;
     moonbit_decref(io->reqs[slot].task);
+    if (io->reqs[slot].retain)
+      moonbit_decref(io->reqs[slot].retain);
 
     n++;
     head++;
