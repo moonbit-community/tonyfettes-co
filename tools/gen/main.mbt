@@ -23,14 +23,14 @@ async fn main {
     emitter.write_string(
       "\n#if (defined(__x86_64__) || defined(_M_X64)) && defined(_WIN32)\n",
     )
-    emitter.emit_array(name="co_shift_code", gen.code(Win64, "co_shift"))
-    emitter.emit_array(name="co_reset_code", gen.code(Win64, "co_reset"))
+    emitter.emit_array(name="moonbit_co_shift_code", gen.code(Win64, "co_shift"))
+    emitter.emit_array(name="moonbit_co_reset_code", gen.code(Win64, "co_reset"))
     emitter.write_string("\n#elif defined(__x86_64__) || defined(_M_X64)\n")
-    emitter.emit_array(name="co_shift_code", gen.code(SysV, "co_shift"))
-    emitter.emit_array(name="co_reset_code", gen.code(SysV, "co_reset"))
+    emitter.emit_array(name="moonbit_co_shift_code", gen.code(SysV, "co_shift"))
+    emitter.emit_array(name="moonbit_co_reset_code", gen.code(SysV, "co_reset"))
     emitter.write_string("\n#elif defined(__aarch64__)\n")
-    emitter.emit_array(name="co_shift_code", gen.code(Arm64, "co_shift"))
-    emitter.emit_array(name="co_reset_code", gen.code(Arm64, "co_reset"))
+    emitter.emit_array(name="moonbit_co_shift_code", gen.code(Arm64, "co_shift"))
+    emitter.emit_array(name="moonbit_co_reset_code", gen.code(Arm64, "co_reset"))
     emitter.write_string(
       (
         #|

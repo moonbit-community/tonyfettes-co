@@ -12,11 +12,12 @@ fn Emitter::emit_byte(self : Emitter, value : Byte) -> Unit {
 }
 
 ///|
-/// Emit one `CO_TEXT const unsigned char <name>[N] = { ... };` array,
-/// 12 bytes per line.
+/// Emit one `static CO_TEXT const unsigned char <name>[N] = { ... };` array,
+/// 12 bytes per line. The array is `static` because co_asm_bytes.c is #included
+/// into co.c (a single translation unit), so no external symbol is needed.
 fn Emitter::emit_array(self : Emitter, name~ : String, code : Bytes) -> Unit {
   let n = code.length()
-  self.write_string("CO_TEXT const unsigned char \{name}[\{n}] = {\n")
+  self.write_string("static CO_TEXT const unsigned char \{name}[\{n}] = {\n")
   for i in 0..<n {
     if i % 12 == 0 {
       self.write_string("  ")
@@ -40,6 +41,10 @@ let header : String =
   #| * src/co_shift.S and src/co_reset.S. Both functions are position-independent
   #| * and relocation-free, so the raw .text bytes are placed in an executable
   #| * section and called directly (see co.c) — no assembler or runtime JIT needed.
+  #| *
+  #| * This file is #included into co.c (not compiled standalone), so the arrays
+  #| * are file-local `static` — they carry the moonbit_co_ prefix only to stay
+  #| * clear of any global-namespace clash (e.g. the well-known libco).
   #| *
   #| * Regenerate with `moon run tools/gen` whenever the .S sources change.
   #| */

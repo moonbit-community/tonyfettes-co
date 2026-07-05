@@ -8,6 +8,6 @@ import {
 } for "test"
 
 options(
-  "native-stub": [ "co.c", "co_asm_bytes.c" ],
+  "native-stub": [ "co.c" ],
   overrides: [ "tonyfettes/co/runtime/abort" ],
 )
