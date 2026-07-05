@@ -1,0 +1,10 @@
+import {
+  "tonyfettes/co",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/env",
+}
+
+options(
+  "is-main": true,
+  overrides: [ "tonyfettes/co/runtime/abort" ],
+)
