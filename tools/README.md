@@ -14,12 +14,15 @@ relocation-free** (only register moves, immediate stack offsets, an indirect
 call through a register, and `ret`). The generator re-checks this invariant on
 every run and aborts if a `.S` edit ever introduces a relocation.
 
-Run this whenever you change `co_shift.S` / `co_reset.S`:
+Run this from the repository root whenever you change `co_shift.S` /
+`co_reset.S`:
 
 ```sh
-cd tools/gen
-moon run . --target native -- "$(git rev-parse --show-toplevel)"
+moon run tools/gen --target native
 ```
+
+The tool resolves the `.S` sources and the `co_asm_bytes.c` output relative to
+the current directory, so it must be run from the repo root.
 
 Requirements (dev machine only): `clang`, `llvm-objcopy`, `moon`. Override the
 tool names with `CLANG=` / `OBJCOPY=` env vars if they differ on your system.
