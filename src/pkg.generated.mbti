@@ -2,12 +2,14 @@
 package "tonyfettes/co"
 
 // Values
+pub fn[R] select(Array[Pollable[R]]) -> R
 
 // Errors
 
 // Types and methods
 type Channel[T]
 pub fn[T] Channel::new() -> Self[T]
+pub fn[T, R] Channel::on_recv(Self[T], (T) -> R) -> Pollable[R]
 pub fn[T] Channel::recv(Self[T]) -> T
 pub fn[T] Channel::send(Self[T], T) -> Unit
 
@@ -16,11 +18,17 @@ pub fn[T] Future::new() -> Self[T]
 pub fn[T] Future::set(Self[T], T) -> Unit
 pub fn[T] Future::wait(Self[T]) -> T
 
+type Pollable[T]
+pub fn[T] Pollable::Pollable(poll? : () -> T?, register~ : (Selected[T]) -> Unit) -> Self[T]
+
 type Promise[T, E]
 pub fn[T, E] Promise::new() -> Self[T, E]
 pub fn[T, E] Promise::reject(Self[T, E], E) -> Unit
 pub fn[T, E] Promise::resolve(Self[T, E], T) -> Unit
 pub fn[T, E : Error] Promise::wait(Self[T, E]) -> T raise E
+
+type Selected[T]
+pub fn[T] Selected::try_set(Self[T], () -> T) -> Bool
 
 type Task
 pub fn Task::current() -> Self
