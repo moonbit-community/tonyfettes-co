@@ -1,0 +1,10 @@
+import {
+  "moonbitlang/async",
+  "moonbitlang/async/aqueue",
+  "moonbitlang/core/bench",
+  "moonbitlang/core/env",
+}
+
+options(
+  "is-main": true,
+)
