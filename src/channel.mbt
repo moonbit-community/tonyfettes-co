@@ -36,7 +36,7 @@ pub fn[T, R] Channel::on_recv(self : Channel[T], f : (T) -> R) -> Pollable[R] {
   Pollable(selected => {
     if self.values.pop_front() is Some(value) {
       if selected.claim() is Some(claim) {
-        claim.set(f(value))
+        claim.resolve(f(value))
       }
       return
     }
@@ -44,7 +44,7 @@ pub fn[T, R] Channel::on_recv(self : Channel[T], f : (T) -> R) -> Pollable[R] {
     self.readers.push_back(
       Pollable(val => {
         if selected.claim() is Some(claim) {
-          claim.set(f(val))
+          claim.deferred(() => f(val))
           task.schedule()
           true
         } else {

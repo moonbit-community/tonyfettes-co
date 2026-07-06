@@ -6,6 +6,7 @@ priv enum SelectedState[T] {
   Available
   Claimed
   Occupied(T)
+  Deferred(() -> T)
 }
 
 ///|
@@ -22,8 +23,13 @@ fn[T] Selected::Selected() -> Selected[T] {
 struct Claim[T](Selected[T])
 
 ///|
-pub fn[T] Claim::set(self : Claim[T], value : T) -> Unit {
+pub fn[T] Claim::resolve(self : Claim[T], value : T) -> Unit {
   self.0.state = Occupied(value)
+}
+
+///|
+pub fn[T] Claim::deferred(self : Claim[T], thunk : () -> T) -> Unit {
+  self.0.state = Deferred(thunk)
 }
 
 ///|
@@ -33,7 +39,7 @@ pub fn[T] Selected::claim(self : Selected[T]) -> Claim[T]? {
       self.state = Claimed
       Some(self)
     }
-    Claimed | Occupied(_) => None
+    Claimed | Occupied(_) | Deferred(_) => None
   }
 }
 
@@ -42,13 +48,16 @@ pub fn[R] select(pollables : Array[Pollable[R]]) -> R {
   let selected = Selected()
   for pollable in pollables {
     pollable(selected)
-    if selected.state is Occupied(value) {
-      return value
+    match selected.state {
+      Occupied(value) => return value
+      Deferred(thunk) => return thunk()
+      Available | Claimed => continue
     }
   }
   Task::suspend()
-  guard selected.state is Occupied(value) else {
-    abort("@tonyfettes/co: select woke up without value")
+  match selected.state {
+    Occupied(value) => return value
+    Deferred(thunk) => return thunk()
+    Available | Claimed => abort("@tonyfettes/co: select woke up without value")
   }
-  value
 }

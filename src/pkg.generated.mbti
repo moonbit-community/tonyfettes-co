@@ -14,7 +14,8 @@ pub fn[T] Channel::recv(Self[T]) -> T
 pub fn[T] Channel::send(Self[T], T) -> Unit
 
 type Claim[T]
-pub fn[T] Claim::set(Self[T], T) -> Unit
+pub fn[T] Claim::deferred(Self[T], () -> T) -> Unit
+pub fn[T] Claim::resolve(Self[T], T) -> Unit
 
 type Future[T]
 pub fn[T] Future::new() -> Self[T]
