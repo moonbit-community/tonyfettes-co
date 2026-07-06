@@ -1,7 +1,7 @@
 ///|
 async fn main {
-  // The repo root is the current working directory: read src/*.S and write
-  // src/co_asm_bytes.c relative to it. Run this tool from the repository root.
+  // The repo root is the current working directory: read src/coroutine/*.S and write
+  // src/coroutine/co_asm_bytes.c relative to it. Run this tool from the repository root.
   guard @env.current_dir() is Some(dir) else {
     raise GenerationFailed(
       "tonyfettes/co-tools: cannot determine current working directory",
@@ -40,7 +40,7 @@ async fn main {
         #|
       ),
     )
-    let outfile = root.join("src").join("co_asm_bytes.c")
+    let outfile = root.join("src").join("coroutine").join("co_asm_bytes.c")
     @fs.write_file(outfile.0, emitter.to_string(), create_mode=CreateOrTruncate)
     println("co-gen: wrote \{outfile.0}")
   }

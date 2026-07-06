@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/co/coroutine"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Coroutine
+pub fn Coroutine::current() -> Self
+#callsite(autofill(loc))
+pub fn Coroutine::new(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Self
+pub fn Coroutine::schedule(Self) -> Unit
+pub fn Coroutine::suspend() -> Unit
+
+// Type aliases
+
+// Traits
+

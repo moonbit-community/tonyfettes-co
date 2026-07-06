@@ -1,7 +1,7 @@
 ///|
 struct Future[T] {
   mut value : T?
-  waiter : Array[Task]
+  waiter : Array[@coroutine.Coroutine]
 }
 
 ///|
@@ -12,8 +12,8 @@ pub fn[T] Future::new() -> Future[T] {
 ///|
 pub fn[T] Future::set(self : Future[T], value : T) -> Unit {
   self.value = Some(value)
-  for task in self.waiter {
-    task.schedule()
+  for coroutine in self.waiter {
+    coroutine.schedule()
   }
   self.waiter.clear()
 }
@@ -23,8 +23,8 @@ pub fn[T] Future::wait(self : Future[T]) -> T {
   if self.value is Some(value) {
     return value
   }
-  self.waiter.push(Task::current())
-  Task::suspend()
+  self.waiter.push(@coroutine.Coroutine::current())
+  @coroutine.Coroutine::suspend()
   guard self.value is Some(value) else {
     abort("@tonyfettes/co: wait woke up but no value available")
   }

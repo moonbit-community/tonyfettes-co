@@ -7,7 +7,7 @@ test "select: wake-path mapper is deferred past send()" {
   let chan : @co.Channel[Int] = @co.Channel::new()
   let order : Array[String] = []
   let result = @co.Future::new()
-  let _ = @co.Task::new(name="selector", () => {
+  let _ = @coroutine.Coroutine::new(name="selector", () => {
     result.set(
       @co.select([
         chan.on_recv(x => {
@@ -38,7 +38,7 @@ test "select: mapper may block on another channel without deadlocking" {
   let c1 : @co.Channel[Int] = @co.Channel::new()
   let c2 : @co.Channel[Int] = @co.Channel::new()
   let result = @co.Future::new()
-  let _ = @co.Task::new(name="selector", () => {
+  let _ = @coroutine.Coroutine::new(name="selector", () => {
     result.set(@co.select([c1.on_recv(x => x + c2.recv())]))
   })
   c1.send(1) // wakes the selector's c1 case (deferred)

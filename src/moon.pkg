@@ -1,13 +1,13 @@
 import {
   "moonbitlang/core/deque",
-  "tonyfettes/co/runtime",
+  "tonyfettes/co/coroutine",
 }
 
 import {
   "moonbitlang/core/test",
+  "tonyfettes/co/coroutine",
 } for "test"
 
 options(
-  "native-stub": [ "co.c" ],
   overrides: [ "tonyfettes/co/runtime/abort" ],
 )

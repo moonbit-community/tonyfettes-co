@@ -14,18 +14,18 @@ pub(all) suberror Errno {
 
 ///|
 #borrow(flags)
-#owned(io, path, value, error, task)
+#owned(io, path, value, error, coroutine)
 extern "c" fn submit_open(
   io : Io,
   path : Bytes,
   flags : FixedArray[Byte],
   value : Ref[UInt64],
   error : Ref[Int],
-  task : @co.Task,
+  coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_open"
 
 ///|
-#owned(io, buffer, value, error, task)
+#owned(io, buffer, value, error, coroutine)
 extern "c" fn submit_read(
   io : Io,
   handle : UInt64,
@@ -34,11 +34,11 @@ extern "c" fn submit_read(
   length : Int,
   value : Ref[UInt64],
   error : Ref[Int],
-  task : @co.Task,
+  coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_read"
 
 ///|
-#owned(io, buffer, value, error, task)
+#owned(io, buffer, value, error, coroutine)
 extern "c" fn submit_write(
   io : Io,
   handle : UInt64,
@@ -47,24 +47,24 @@ extern "c" fn submit_write(
   length : Int,
   value : Ref[UInt64],
   error : Ref[Int],
-  task : @co.Task,
+  coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_write"
 
 ///|
-#owned(io, value, error, task)
+#owned(io, value, error, coroutine)
 extern "c" fn submit_close(
   io : Io,
   handle : UInt64,
   value : Ref[UInt64],
   error : Ref[Int],
-  task : @co.Task,
+  coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_close"
 
 ///|
-#borrow(io, tasks, length)
+#borrow(io, coroutines, length)
 extern "c" fn io_poll(
   io : Io,
-  tasks : FixedArray[@co.Task],
+  coroutines : FixedArray[@coroutine.Coroutine],
   length : Ref[Int],
   timeout : Int64,
 ) = "moonbit_co_io_poll"
@@ -82,17 +82,17 @@ let max_completions : Int = 256
 let io : Io = Io::new()
 
 ///|
-let poll_tasks : FixedArray[@co.Task] = FixedArray::make(
+let poll_coroutines : FixedArray[@coroutine.Coroutine] = FixedArray::make(
   max_completions,
-  @co.Task::current(),
+  @coroutine.Coroutine::current(),
 )
 
 ///|
 pub fn suspend() -> Unit {
   let length = Ref(max_completions)
-  io_poll(io, poll_tasks, length, -1)
+  io_poll(io, poll_coroutines, length, -1)
   for i in 0..<length.val {
-    poll_tasks[i].schedule()
+    poll_coroutines[i].schedule()
   }
 }
 
@@ -116,8 +116,8 @@ pub fn open(
     truncate.to_int().to_byte(),
     exclusive.to_int().to_byte(),
   ]
-  submit_open(io, path, flags, value, error, @co.Task::current())
-  @co.Task::suspend()
+  submit_open(io, path, flags, value, error, @coroutine.Coroutine::current())
+  @coroutine.Coroutine::suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }
@@ -144,9 +144,9 @@ pub fn read(
     length,
     value,
     error,
-    @co.Task::current(),
+    @coroutine.Coroutine::current(),
   )
-  @co.Task::suspend()
+  @coroutine.Coroutine::suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }
@@ -173,9 +173,9 @@ pub fn write(
     length,
     value,
     error,
-    @co.Task::current(),
+    @coroutine.Coroutine::current(),
   )
-  @co.Task::suspend()
+  @coroutine.Coroutine::suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }
@@ -186,8 +186,8 @@ pub fn write(
 pub fn close(handle : Handle) -> Unit raise Errno {
   let value = Ref(0UL)
   let error = Ref(0)
-  submit_close(io, handle.0, value, error, @co.Task::current())
-  @co.Task::suspend()
+  submit_close(io, handle.0, value, error, @coroutine.Coroutine::current())
+  @coroutine.Coroutine::suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }

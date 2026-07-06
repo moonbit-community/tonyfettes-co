@@ -1,6 +1,6 @@
-// Generator for src/co_asm_bytes.c.
+// Generator for src/coroutine/co_asm_bytes.c.
 //
-// Assembles the two context-switch primitives (src/co_shift.S, src/co_reset.S)
+// Assembles the two context-switch primitives (src/coroutine/co_shift.S, src/coroutine/co_reset.S)
 // for each supported ABI, checks each object is relocation-free, extracts the
 // raw `.text` bytes, and emits the committed C file that embeds them in an
 // executable section (see co.c). No assembler or runtime JIT is needed by end
@@ -67,7 +67,7 @@ struct Generator {
 /// relocation-free, and return the raw `.text` bytes.
 async fn Generator::code(self : Generator, abi : Abi, func : String) -> Bytes {
   let obj = self.work.join("\{abi.label()}_\{func}.o")
-  let src = self.root.join("src").join("\{func}.S")
+  let src = self.root.join("src").join("coroutine").join("\{func}.S")
   let rc = @process.run(self.clang, [
     "--target=\{abi.triple()}",
     abi.flag(),

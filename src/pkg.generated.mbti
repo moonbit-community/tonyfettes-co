@@ -33,13 +33,6 @@ pub fn[T, E : Error] Promise::wait(Self[T, E]) -> T raise E
 type Selected[T]
 pub fn[T] Selected::claim(Self[T]) -> Claim[T]?
 
-type Task
-pub fn Task::current() -> Self
-#callsite(autofill(loc))
-pub fn Task::new(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Self
-pub fn Task::schedule(Self) -> Unit
-pub fn Task::suspend() -> Unit
-
 // Type aliases
 
 // Traits
