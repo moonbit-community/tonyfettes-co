@@ -33,21 +33,26 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
 
 ///|
 pub fn[T, R] Channel::on_recv(self : Channel[T], f : (T) -> R) -> Pollable[R] {
-  {
-    poll: () => self.values.pop_front().map(value => f(value)),
-    register: box => {
-      let task = Task::current()
-      self.readers.push_back(
-        Pollable(val => {
-          box.try_set(() => {
-            let val = f(val)
-            task.schedule()
-            val
-          })
-        }),
-      )
-    },
-  }
+  Pollable(selected => {
+    if self.values.pop_front() is Some(value) {
+      if selected.claim() is Some(claim) {
+        claim.set(f(value))
+      }
+      return
+    }
+    let task = Task::current()
+    self.readers.push_back(
+      Pollable(val => {
+        if selected.claim() is Some(claim) {
+          claim.set(f(val))
+          task.schedule()
+          true
+        } else {
+          false
+        }
+      }),
+    )
+  })
 }
 
 ///|

@@ -1,56 +1,53 @@
 ///|
-struct Pollable[T] {
-  poll : () -> T?
-  register : (Selected[T]) -> Unit
-}
+pub(all) struct Pollable[T]((Selected[T]) -> Unit)
 
 ///|
-pub fn[T] Pollable::Pollable(
-  poll? : () -> T? = () => None,
-  register~ : (Selected[T]) -> Unit,
-) -> Pollable[T] {
-  Pollable::{ poll, register }
+priv enum SelectedState[T] {
+  Available
+  Claimed
+  Occupied(T)
 }
 
 ///|
 struct Selected[T] {
-  mut value : T?
+  mut state : SelectedState[T]
 }
 
 ///|
 fn[T] Selected::Selected() -> Selected[T] {
-  { value: None }
+  { state: Available }
 }
 
 ///|
-#locals(f)
-pub fn[T] Selected::try_set(self : Selected[T], f : () -> T) -> Bool {
-  if self.value is Some(_) {
-    false
-  } else {
-    self.value = Some(f())
-    true
+struct Claim[T](Selected[T])
+
+///|
+pub fn[T] Claim::set(self : Claim[T], value : T) -> Unit {
+  self.0.state = Occupied(value)
+}
+
+///|
+pub fn[T] Selected::claim(self : Selected[T]) -> Claim[T]? {
+  match self.state {
+    Available => {
+      self.state = Claimed
+      Some(self)
+    }
+    Claimed | Occupied(_) => None
   }
 }
 
 ///|
 pub fn[R] select(pollables : Array[Pollable[R]]) -> R {
+  let selected = Selected()
   for pollable in pollables {
-    if (pollable.poll)() is Some(value) {
+    pollable(selected)
+    if selected.state is Occupied(value) {
       return value
     }
   }
-  let selected = Selected()
-  for pollable in pollables {
-    (pollable.register)(selected)
-    guard selected.value is None else {
-      abort(
-        "@tonyfettes/co: selected is set during registration",
-      )
-    }
-  }
   Task::suspend()
-  guard selected.value is Some(value) else {
+  guard selected.state is Occupied(value) else {
     abort("@tonyfettes/co: select woke up without value")
   }
   value
