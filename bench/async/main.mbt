@@ -107,11 +107,21 @@ async fn bench_spawn() -> Unit {
 
 ///|
 /// Park N tasks on a long sleep; peak RSS is measured from outside the
-/// process. The group cancels them on exit, after the peak is reached.
+/// process. no_wait children are canceled as soon as the group body exits,
+/// so the body must not return until every child has entered its sleep:
+/// each child bumps the counter and immediately suspends into sleep (no
+/// suspension point between the two), so counter == N implies all parked.
 async fn bench_parked() -> Unit {
+  let mut parked = 0
   @async.with_task_group(group => {
     for _ in 0..<PARKED_TASKS {
-      group.spawn_bg(no_wait=true, () => @async.sleep(3_600_000))
+      group.spawn_bg(no_wait=true, () => {
+        parked += 1
+        @async.sleep(3_600_000)
+      })
+    }
+    while parked < PARKED_TASKS {
+      @async.pause()
     }
   })
 }
