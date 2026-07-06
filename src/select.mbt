@@ -43,6 +43,11 @@ pub fn[R] select(pollables : Array[Pollable[R]]) -> R {
   let selected = Selected()
   for pollable in pollables {
     (pollable.register)(selected)
+    guard selected.value is None else {
+      abort(
+        "@tonyfettes/co: selected is set during registration",
+      )
+    }
   }
   Task::suspend()
   guard selected.value is Some(value) else {
