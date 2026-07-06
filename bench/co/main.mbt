@@ -97,9 +97,16 @@ fn bench_spawn() -> Unit {
 
 ///|
 /// Park N tasks forever; peak RSS is measured from outside the process.
+/// Task::suspend documents that the caller must store the handle before
+/// parking, so keep every task rooted in `parked` until the function (and
+/// with it the process peak) is past the measurement point.
 fn bench_parked() -> Unit {
+  let parked : Array[@co.Task] = []
   for _ in 0..<PARKED_TASKS {
-    let _ = @co.Task::new(name="p", () => @co.Task::suspend())
+    parked.push(@co.Task::new(name="p", () => @co.Task::suspend()))
+  }
+  if parked.length() != PARKED_TASKS {
+    println("parked mismatch: \{parked.length()}")
   }
 }
 
