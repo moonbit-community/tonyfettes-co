@@ -6,7 +6,7 @@ struct Channel[T] {
 
 ///|
 priv enum Reader[T] {
-  Receiver(Task, mut value~ : T?)
+  Receiver(@coroutine.Coroutine, mut value~ : T?)
   Pollable((T) -> Bool)
 }
 
@@ -19,9 +19,9 @@ pub fn[T] Channel::new() -> Channel[T] {
 pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
   while self.readers.pop_front() is Some(reader) {
     match reader {
-      Receiver(task, value=_) as receiver => {
+      Receiver(coroutine, value=_) as receiver => {
         receiver.value = Some(value)
-        task.schedule()
+        coroutine.schedule()
         break
       }
       Pollable(func) => if func(value) { break } else { continue }
@@ -40,12 +40,12 @@ pub fn[T, R] Channel::on_recv(self : Channel[T], f : (T) -> R) -> Pollable[R] {
       }
       return
     }
-    let task = Task::current()
+    let coroutine = @coroutine.Coroutine::current()
     self.readers.push_back(
       Pollable(val => {
         if selected.claim() is Some(claim) {
           claim.deferred(() => f(val))
-          task.schedule()
+          coroutine.schedule()
           true
         } else {
           false
@@ -60,9 +60,9 @@ pub fn[T] Channel::recv(self : Channel[T]) -> T {
   if self.values.pop_front() is Some(value) {
     return value
   }
-  let reader = Receiver(Task::current(), value=None)
+  let reader = Receiver(@coroutine.Coroutine::current(), value=None)
   self.readers.push_back(reader)
-  Task::suspend()
+  @coroutine.Coroutine::suspend()
   guard reader is Receiver(_, value~) && value is Some(value) else {
     abort("@tonyfettes/co: recv woke up but no value available")
   }

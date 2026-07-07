@@ -1,8 +1,9 @@
 import {
-  "tonyfettes/co",
+  "tonyfettes/co/coroutine",
 }
 
 import {
+  "tonyfettes/co",
   "tonyfettes/co-io" @io,
   "moonbitlang/core/test",
   "moonbitlang/core/debug",

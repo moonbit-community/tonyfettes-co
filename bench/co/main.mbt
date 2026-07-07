@@ -45,7 +45,7 @@ fn bench_chan() -> Unit {
 fn bench_pingpong() -> Unit {
   let ping : @co.Channel[Int] = @co.Channel::new()
   let pong : @co.Channel[Int] = @co.Channel::new()
-  let _ = @co.Task::new(name="echo", () => {
+  let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<PINGPONG_ROUNDS {
       pong.send(ping.recv())
     }
@@ -72,7 +72,7 @@ fn chain(depth : Int, ping : @co.Channel[Int], pong : @co.Channel[Int]) -> Int {
 fn bench_chain() -> Unit {
   let ping : @co.Channel[Int] = @co.Channel::new()
   let pong : @co.Channel[Int] = @co.Channel::new()
-  let _ = @co.Task::new(name="echo", () => {
+  let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<CHAIN_ROUNDS {
       ignore(chain(CHAIN_DEPTH, ping, pong))
     }
@@ -88,7 +88,7 @@ fn bench_chain() -> Unit {
 fn bench_spawn() -> Unit {
   let mut count = 0
   for _ in 0..<SPAWN_TASKS {
-    let _ = @co.Task::new(name="t", () => count += 1)
+    let _ = @coroutine.Coroutine::new(name="t", () => count += 1)
   }
   if count != SPAWN_TASKS {
     println("spawn mismatch: \{count}")
@@ -96,14 +96,16 @@ fn bench_spawn() -> Unit {
 }
 
 ///|
-/// Park N tasks forever; peak RSS is measured from outside the process.
-/// Task::suspend documents that the caller must store the handle before
-/// parking, so keep every task rooted in `parked` until the function (and
-/// with it the process peak) is past the measurement point.
+/// Park N coroutines forever; peak RSS is measured from outside the process.
+/// Coroutine::suspend documents that the caller must store the handle before
+/// parking, so keep every coroutine rooted in `parked` until the function
+/// (and with it the process peak) is past the measurement point.
 fn bench_parked() -> Unit {
-  let parked : Array[@co.Task] = []
+  let parked : Array[@coroutine.Coroutine] = []
   for _ in 0..<PARKED_TASKS {
-    parked.push(@co.Task::new(name="p", () => @co.Task::suspend()))
+    parked.push(
+      @coroutine.Coroutine::new(name="p", () => @coroutine.Coroutine::suspend()),
+    )
   }
   if parked.length() != PARKED_TASKS {
     println("parked mismatch: \{parked.length()}")
