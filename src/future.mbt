@@ -23,8 +23,8 @@ pub fn[T] Future::wait(self : Future[T]) -> T {
   if self.value is Some(value) {
     return value
   }
-  self.waiter.push(@coroutine.Coroutine::current())
-  @coroutine.Coroutine::suspend()
+  self.waiter.push(@coroutine.current())
+  @coroutine.suspend()
   guard self.value is Some(value) else {
     abort("@tonyfettes/co: wait woke up but no value available")
   }

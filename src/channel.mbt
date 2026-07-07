@@ -40,7 +40,7 @@ pub fn[T, R] Channel::on_recv(self : Channel[T], f : (T) -> R) -> Pollable[R] {
       }
       return
     }
-    let coroutine = @coroutine.Coroutine::current()
+    let coroutine = @coroutine.current()
     self.readers.push_back(
       Pollable(val => {
         if selected.claim() is Some(claim) {
@@ -60,9 +60,9 @@ pub fn[T] Channel::recv(self : Channel[T]) -> T {
   if self.values.pop_front() is Some(value) {
     return value
   }
-  let reader = Receiver(@coroutine.Coroutine::current(), value=None)
+  let reader = Receiver(@coroutine.current(), value=None)
   self.readers.push_back(reader)
-  @coroutine.Coroutine::suspend()
+  @coroutine.suspend()
   guard reader is Receiver(_, value~) && value is Some(value) else {
     abort("@tonyfettes/co: recv woke up but no value available")
   }

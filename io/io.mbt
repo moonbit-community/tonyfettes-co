@@ -84,7 +84,7 @@ let io : Io = Io::new()
 ///|
 let poll_coroutines : FixedArray[@coroutine.Coroutine] = FixedArray::make(
   max_completions,
-  @coroutine.Coroutine::current(),
+  @coroutine.current(),
 )
 
 ///|
@@ -116,8 +116,8 @@ pub fn open(
     truncate.to_int().to_byte(),
     exclusive.to_int().to_byte(),
   ]
-  submit_open(io, path, flags, value, error, @coroutine.Coroutine::current())
-  @coroutine.Coroutine::suspend()
+  submit_open(io, path, flags, value, error, @coroutine.current())
+  @coroutine.suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }
@@ -144,9 +144,9 @@ pub fn read(
     length,
     value,
     error,
-    @coroutine.Coroutine::current(),
+    @coroutine.current(),
   )
-  @coroutine.Coroutine::suspend()
+  @coroutine.suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }
@@ -173,9 +173,9 @@ pub fn write(
     length,
     value,
     error,
-    @coroutine.Coroutine::current(),
+    @coroutine.current(),
   )
-  @coroutine.Coroutine::suspend()
+  @coroutine.suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }
@@ -186,8 +186,8 @@ pub fn write(
 pub fn close(handle : Handle) -> Unit raise Errno {
   let value = Ref(0UL)
   let error = Ref(0)
-  submit_close(io, handle.0, value, error, @coroutine.Coroutine::current())
-  @coroutine.Coroutine::suspend()
+  submit_close(io, handle.0, value, error, @coroutine.current())
+  @coroutine.suspend()
   if error.val != 0 {
     raise Errno(error.val)
   }

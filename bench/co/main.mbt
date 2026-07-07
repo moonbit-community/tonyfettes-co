@@ -104,7 +104,7 @@ fn bench_parked() -> Unit {
   let parked : Array[@coroutine.Coroutine] = []
   for _ in 0..<PARKED_TASKS {
     parked.push(
-      @coroutine.Coroutine::new(name="p", () => @coroutine.Coroutine::suspend()),
+      @coroutine.Coroutine::new(name="p", () => @coroutine.suspend()),
     )
   }
   if parked.length() != PARKED_TASKS {

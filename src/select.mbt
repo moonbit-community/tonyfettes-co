@@ -54,7 +54,7 @@ pub fn[R] select(pollables : Array[Pollable[R]]) -> R {
       Available | Claimed => continue
     }
   }
-  @coroutine.Coroutine::suspend()
+  @coroutine.suspend()
   match selected.state {
     Occupied(value) => return value
     Deferred(thunk) => return thunk()

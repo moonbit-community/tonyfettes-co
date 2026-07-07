@@ -112,6 +112,8 @@ fn Scheduler::schedule(self : Scheduler, coroutine : Coroutine) -> Unit {
 
 ///|
 /// Get the currently running routine.
+#as_free_fn
+#deprecated("Use @coroutine.current()")
 pub fn Coroutine::current() -> Coroutine {
   scheduler.curr.val
 }
@@ -121,6 +123,8 @@ pub fn Coroutine::current() -> Coroutine {
 /// The caller must ensure this routine's handle has been stored somewhere
 /// (ready queue, channel readers, IO pending, etc.) before calling park,
 /// otherwise it will never be woken up.
+#as_free_fn
+#deprecated("Use @coroutine.suspend()")
 pub fn Coroutine::suspend() -> Unit {
   let prev = scheduler.curr.val
   prev.state = Suspended
