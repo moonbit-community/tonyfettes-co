@@ -1,0 +1,8 @@
+import {
+  "tonyfettes/co/coroutine",
+}
+
+import {
+  "tonyfettes/co/select",
+  "tonyfettes/co/channel",
+} for "wbtest"

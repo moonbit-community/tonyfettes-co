@@ -1,11 +1,11 @@
 ///|
 test "select" {
-  let int_chan = @co.Channel::new()
+  let int_chan = @channel.Channel::new()
   int_chan.send(3)
-  let str_chan = @co.Channel::new()
+  let str_chan = @channel.Channel::new()
   str_chan.send("string")
   inspect(
-    @co.select <| [
+    @select.select <| [
       int_chan.on_recv() <| int => { int.to_string() },
       str_chan.on_recv() <| str => { str },
     ],

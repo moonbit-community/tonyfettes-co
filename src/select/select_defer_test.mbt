@@ -4,12 +4,12 @@
 // stack during `send`. This is asserted via ordering so a reintroduced eager
 // path fails with a clean diff instead of deadlocking.
 test "select: wake-path mapper is deferred past send()" {
-  let chan : @co.Channel[Int] = @co.Channel::new()
+  let chan : @channel.Channel[Int] = @channel.Channel::new()
   let order : Array[String] = []
-  let result = @co.Future::new()
+  let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="selector", () => {
     result.set(
-      @co.select([
+      @select.select([
         chan.on_recv(x => {
           order.push("mapper")
           x
@@ -35,11 +35,11 @@ test "select: wake-path mapper is deferred past send()" {
 // never be scheduled, and this would hang. Deferring `f` to the selector lets
 // the sender finish both sends first.
 test "select: mapper may block on another channel without deadlocking" {
-  let c1 : @co.Channel[Int] = @co.Channel::new()
-  let c2 : @co.Channel[Int] = @co.Channel::new()
-  let result = @co.Future::new()
+  let c1 : @channel.Channel[Int] = @channel.Channel::new()
+  let c2 : @channel.Channel[Int] = @channel.Channel::new()
+  let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="selector", () => {
-    result.set(@co.select([c1.on_recv(x => x + c2.recv())]))
+    result.set(@select.select([c1.on_recv(x => x + c2.recv())]))
   })
   c1.send(1) // wakes the selector's c1 case (deferred)
   c2.send(2) // reached only because send(1) did not block on the mapper

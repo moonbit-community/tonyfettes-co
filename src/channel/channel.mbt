@@ -32,7 +32,10 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
 }
 
 ///|
-pub fn[T, R] Channel::on_recv(self : Channel[T], f : (T) -> R) -> Pollable[R] {
+pub fn[T, R] Channel::on_recv(
+  self : Channel[T],
+  f : (T) -> R,
+) -> @select.Pollable[R] {
   Pollable(selected => {
     if self.values.pop_front() is Some(value) {
       if selected.claim() is Some(claim) {

@@ -1,5 +1,5 @@
 import {
-  "tonyfettes/co",
+  "tonyfettes/co/channel",
   "tonyfettes/co/coroutine",
   "moonbitlang/core/bench",
   "moonbitlang/core/env",

@@ -27,7 +27,7 @@ fn run(name : String, f : () -> Unit) -> Unit {
 ///|
 /// Channel throughput without any context switch: fill then drain.
 fn bench_chan() -> Unit {
-  let chan : @co.Channel[Int] = @co.Channel::new()
+  let chan : @channel.Channel[Int] = @channel.Channel::new()
   for i in 0..<CHAN_OPS {
     chan.send(i)
   }
@@ -43,8 +43,8 @@ fn bench_chan() -> Unit {
 ///|
 /// Two tasks bouncing a token: 2 context switches + 2 channel ops per round.
 fn bench_pingpong() -> Unit {
-  let ping : @co.Channel[Int] = @co.Channel::new()
-  let pong : @co.Channel[Int] = @co.Channel::new()
+  let ping : @channel.Channel[Int] = @channel.Channel::new()
+  let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<PINGPONG_ROUNDS {
       pong.send(ping.recv())
@@ -58,7 +58,7 @@ fn bench_pingpong() -> Unit {
 
 ///|
 /// Non-tail recursion so every level keeps a real frame.
-fn chain(depth : Int, ping : @co.Channel[Int], pong : @co.Channel[Int]) -> Int {
+fn chain(depth : Int, ping : @channel.Channel[Int], pong : @channel.Channel[Int]) -> Int {
   if depth == 0 {
     pong.send(ping.recv())
     1
@@ -70,8 +70,8 @@ fn chain(depth : Int, ping : @co.Channel[Int], pong : @co.Channel[Int]) -> Int {
 ///|
 /// Same as pingpong, but the echo side suspends under a 30-frame call stack.
 fn bench_chain() -> Unit {
-  let ping : @co.Channel[Int] = @co.Channel::new()
-  let pong : @co.Channel[Int] = @co.Channel::new()
+  let ping : @channel.Channel[Int] = @channel.Channel::new()
+  let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<CHAIN_ROUNDS {
       ignore(chain(CHAIN_DEPTH, ping, pong))

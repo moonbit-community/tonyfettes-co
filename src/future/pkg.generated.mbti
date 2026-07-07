@@ -1,0 +1,23 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/co/future"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Future[T]
+pub fn[T] Future::new() -> Self[T]
+pub fn[T] Future::set(Self[T], T) -> Unit
+pub fn[T] Future::wait(Self[T]) -> T
+
+type Promise[T, E]
+pub fn[T, E] Promise::new() -> Self[T, E]
+pub fn[T, E] Promise::reject(Self[T, E], E) -> Unit
+pub fn[T, E] Promise::resolve(Self[T, E], T) -> Unit
+pub fn[T, E : Error] Promise::wait(Self[T, E]) -> T raise E
+
+// Type aliases
+
+// Traits
+

@@ -1,0 +1,22 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/co/select"
+
+// Values
+pub fn[R] select(Array[Pollable[R]]) -> R
+
+// Errors
+
+// Types and methods
+type Claim[T]
+pub fn[T] Claim::deferred(Self[T], () -> T) -> Unit
+pub fn[T] Claim::resolve(Self[T], T) -> Unit
+
+pub(all) struct Pollable[T]((Selected[T]) -> Unit)
+
+type Selected[T]
+pub fn[T] Selected::claim(Self[T]) -> Claim[T]?
+
+// Type aliases
+
+// Traits
+

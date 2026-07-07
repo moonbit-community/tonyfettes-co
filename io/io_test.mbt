@@ -29,8 +29,8 @@ test "concurrent IO" {
   let src = b"concurrent test"
   let _ = @io.write(fd, src)
   @io.close(fd)
-  let f1 = @co.Promise::new()
-  let f2 = @co.Promise::new()
+  let f1 = @future.Promise::new()
+  let f2 = @future.Promise::new()
   let buf1 = FixedArray::make(64, b'\x00')
   let buf2 = FixedArray::make(64, b'\x00')
   let _ = @coroutine.Coroutine::new(() => {

@@ -1,0 +1,9 @@
+import {
+  "tonyfettes/co/coroutine",
+}
+
+import {
+  "tonyfettes/co/channel",
+  "tonyfettes/co/future",
+  "tonyfettes/co/select",
+} for "test"

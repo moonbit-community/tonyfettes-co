@@ -3,8 +3,8 @@ using @test {assert_eq}
 
 ///|
 test "Channel" {
-  let chan = @co.Channel::new()
-  let done = @co.Channel::new()
+  let chan = @channel.Channel::new()
+  let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="f", () => {
     println("f: 1")
     println("f: chan.recv() -> \{chan.recv()}")
@@ -24,9 +24,9 @@ test "Channel" {
 
 ///|
 test "Bidirectional: f <-> g" {
-  let forward = @co.Channel::new()
-  let backward = @co.Channel::new()
-  let done = @co.Channel::new()
+  let forward = @channel.Channel::new()
+  let backward = @channel.Channel::new()
+  let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="f", () => {
     println("f: before forward.send(1)")
     forward.send(1)
@@ -49,8 +49,8 @@ test "Bidirectional: f <-> g" {
 
 ///|
 test "Channel: values follow FIFO" {
-  let chan : @co.Channel[Int] = @co.Channel::new()
-  let done = @co.Channel::new()
+  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let done = @channel.Channel::new()
   chan.send(1)
   chan.send(2)
   chan.send(3)
@@ -67,8 +67,8 @@ test "Channel: values follow FIFO" {
 
 ///|
 test "Channel: readers follow FIFO" {
-  let chan : @co.Channel[Int] = @co.Channel::new()
-  let done : @co.Channel[Unit] = @co.Channel::new()
+  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let done : @channel.Channel[Unit] = @channel.Channel::new()
   let results = []
   let _ = @coroutine.Coroutine::new(name="reader1", () => {
     results.push(("reader1", chan.recv()))
@@ -87,8 +87,8 @@ test "Channel: readers follow FIFO" {
 
 ///|
 test "Bidirectional: main <-> f" {
-  let forward = @co.Channel::new()
-  let backward = @co.Channel::new()
+  let forward = @channel.Channel::new()
+  let backward = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="f", () => {
     println("f: before forward.send(1)")
     forward.send(1)
@@ -105,16 +105,16 @@ test "Bidirectional: main <-> f" {
 
 ///|
 test "Future: wait for result" {
-  let f = @co.Future::new()
+  let f = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="compute", () => f.set(21 * 2))
   assert_eq(f.wait(), 42)
 }
 
 ///|
 test "Future: multiple futures" {
-  let a = @co.Future::new()
-  let b = @co.Future::new()
-  let c = @co.Future::new()
+  let a = @future.Future::new()
+  let b = @future.Future::new()
+  let c = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="a", () => a.set(10))
   let _ = @coroutine.Coroutine::new(name="b", () => b.set(20))
   let _ = @coroutine.Coroutine::new(name="c", () => c.set(30))
@@ -123,7 +123,7 @@ test "Future: multiple futures" {
 
 ///|
 test "Coroutine: spawn and complete" {
-  let result = @co.Future::new()
+  let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="worker", () => result.set(42))
   assert_eq(result.wait(), 42)
 }
@@ -131,7 +131,7 @@ test "Coroutine: spawn and complete" {
 ///|
 test "Coroutine: FIFO scheduling order" {
   let order : Array[Int] = []
-  let done = @co.Channel::new()
+  let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="a", () => {
     order.push(1)
     done.send(())
@@ -152,9 +152,9 @@ test "Coroutine: FIFO scheduling order" {
 
 ///|
 test "Future: multiple waiters" {
-  let f = @co.Future::new()
+  let f = @future.Future::new()
   let results : Array[Int] = []
-  let done = @co.Channel::new()
+  let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="w1", () => {
     results.push(f.wait())
     done.send(())
@@ -176,9 +176,9 @@ test "Future: multiple waiters" {
 
 ///|
 test "Channel: send wakes one reader" {
-  let chan : @co.Channel[Int] = @co.Channel::new()
+  let chan : @channel.Channel[Int] = @channel.Channel::new()
   let woken : Array[String] = []
-  let done = @co.Channel::new()
+  let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="r1", () => {
     let _ = chan.recv()
     woken.push("r1")
@@ -201,8 +201,8 @@ test "Channel: send wakes one reader" {
 
 ///|
 test "Future: blocks until ready" {
-  let chan = @co.Channel::new()
-  let f = @co.Future::new()
+  let chan = @channel.Channel::new()
+  let f = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="waiter", () => {
     let v = chan.recv()
     println("waiter: chan.recv() -> \{v}")
