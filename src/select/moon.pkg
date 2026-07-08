@@ -1,12 +1,11 @@
 import {
-  "moonbitlang/core/deque",
+  "tonyfettes/co/coroutine",
 }
 
 import {
-  "moonbitlang/core/test",
-  "tonyfettes/co/coroutine",
   "tonyfettes/co/channel",
   "tonyfettes/co/future",
+  "tonyfettes/co/select",
 } for "test"
 
 options(

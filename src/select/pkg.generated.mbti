@@ -1,0 +1,26 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/co/select"
+
+import {
+  "tonyfettes/co/coroutine",
+}
+
+// Values
+pub fn[R] select((Selector[R]) -> Unit) -> R
+
+// Errors
+
+// Types and methods
+pub(all) struct Selector[T] {
+  mut coroutine : @coroutine.Coroutine?
+  mut completed : Bool
+  mut value : T?
+  mut thunk : (() -> T)?
+}
+pub fn[T] Selector::Selector() -> Self[T]
+pub fn[T] Selector::wait(Self[T]) -> T
+
+// Type aliases
+
+// Traits
+

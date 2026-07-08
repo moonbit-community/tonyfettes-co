@@ -3,8 +3,8 @@ import {
 }
 
 import {
-  "tonyfettes/co",
   "tonyfettes/co-io" @io,
+  "tonyfettes/co/future",
   "moonbitlang/core/test",
   "moonbitlang/core/debug",
 } for "test"

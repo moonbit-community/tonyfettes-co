@@ -1,12 +1,9 @@
 import {
-  "tonyfettes/co/channel",
+  "moonbitlang/core/deque",
   "tonyfettes/co/coroutine",
   "tonyfettes/co/select",
-  "moonbitlang/core/bench",
-  "moonbitlang/core/env",
 }
 
 options(
-  "is-main": true,
   overrides: [ "tonyfettes/co/runtime/abort" ],
 )
