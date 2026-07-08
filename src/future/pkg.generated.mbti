@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "tonyfettes/co/future"
 
+import {
+  "tonyfettes/co/select",
+}
+
 // Values
 
 // Errors
@@ -10,6 +14,8 @@ type Future[T]
 pub fn[T] Future::new() -> Self[T]
 pub fn[T] Future::set(Self[T], T) -> Unit
 pub fn[T] Future::wait(Self[T]) -> T
+pub fn[T, R] Future::wait_map_to(Self[T], @select.Selector[R], (T) -> R) -> Unit
+pub fn[T] Future::wait_to(Self[T], @select.Selector[T]) -> Unit
 
 type Promise[T, E]
 pub fn[T, E] Promise::new() -> Self[T, E]
