@@ -6,3 +6,7 @@ import {
   "tonyfettes/co/select",
   "tonyfettes/co/channel",
 } for "wbtest"
+
+options(
+  overrides: [ "tonyfettes/co/runtime/abort" ],
+)

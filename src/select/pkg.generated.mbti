@@ -1,20 +1,24 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "tonyfettes/co/select"
 
+import {
+  "tonyfettes/co/coroutine",
+}
+
 // Values
-pub fn[R] select(Array[Pollable[R]]) -> R
+pub fn[R] select((Selector[R]) -> Unit) -> R
 
 // Errors
 
 // Types and methods
-type Claim[T]
-pub fn[T] Claim::deferred(Self[T], () -> T) -> Unit
-pub fn[T] Claim::resolve(Self[T], T) -> Unit
-
-pub(all) struct Pollable[T]((Selected[T]) -> Unit)
-
-type Selected[T]
-pub fn[T] Selected::claim(Self[T]) -> Claim[T]?
+pub(all) struct Selector[T] {
+  mut coroutine : @coroutine.Coroutine?
+  mut completed : Bool
+  mut value : T?
+  mut thunk : (() -> T)?
+}
+pub fn[T] Selector::Selector() -> Self[T]
+pub fn[T] Selector::wait(Self[T]) -> T
 
 // Type aliases
 

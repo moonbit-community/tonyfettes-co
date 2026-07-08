@@ -58,7 +58,11 @@ fn bench_pingpong() -> Unit {
 
 ///|
 /// Non-tail recursion so every level keeps a real frame.
-fn chain(depth : Int, ping : @channel.Channel[Int], pong : @channel.Channel[Int]) -> Int {
+fn chain(
+  depth : Int,
+  ping : @channel.Channel[Int],
+  pong : @channel.Channel[Int],
+) -> Int {
   if depth == 0 {
     pong.send(ping.recv())
     1
@@ -103,12 +107,56 @@ fn bench_spawn() -> Unit {
 fn bench_parked() -> Unit {
   let parked : Array[@coroutine.Coroutine] = []
   for _ in 0..<PARKED_TASKS {
-    parked.push(
-      @coroutine.Coroutine::new(name="p", () => @coroutine.suspend()),
-    )
+    parked.push(@coroutine.Coroutine::new(name="p", () => @coroutine.suspend()))
   }
   if parked.length() != PARKED_TASKS {
     println("parked mismatch: \{parked.length()}")
+  }
+}
+
+///|
+const SELECT_OPS : Int = 1_000_000
+
+///|
+const SELECT_ROUNDS : Int = 1_000_000
+
+///|
+/// Two-way select where one channel is always ready: measures the per-call
+/// allocation overhead of the select machinery, no context switch.
+fn bench_select() -> Unit {
+  let a : @channel.Channel[Int] = @channel.Channel::new()
+  let b : @channel.Channel[Int] = @channel.Channel::new()
+  let mut sum = 0
+  for i in 0..<SELECT_OPS {
+    if i % 2 == 0 {
+      a.send(i)
+    } else {
+      b.send(i)
+    }
+    sum += @select.select(s => {
+      a.recv_map_to(s, _ => 1)
+      b.recv_map_to(s, _ => 1)
+    })
+  }
+  if sum != SELECT_OPS {
+    println("select mismatch: \{sum}")
+  }
+}
+
+///|
+/// Pingpong where both sides receive through select: exercises the
+/// suspend/deferred-wake path of select.
+fn bench_select_suspend() -> Unit {
+  let ping : @channel.Channel[Int] = @channel.Channel::new()
+  let pong : @channel.Channel[Int] = @channel.Channel::new()
+  let _ = @coroutine.Coroutine::new(name="echo", () => {
+    for _ in 0..<SELECT_ROUNDS {
+      pong.send(@select.select(s => ping.recv_map_to(s, x => x)))
+    }
+  })
+  for _ in 0..<SELECT_ROUNDS {
+    ping.send(1)
+    ignore(@select.select(s => pong.recv_map_to(s, x => x)))
   }
 }
 
@@ -122,6 +170,11 @@ fn main {
     "chain" => run("chain", bench_chain)
     "spawn" => run("spawn", bench_spawn)
     "parked" => run("parked", bench_parked)
-    _ => println("usage: co_bench <chan|pingpong|chain|spawn|parked>")
+    "select" => run("select", bench_select)
+    "select_suspend" => run("select_suspend", bench_select_suspend)
+    _ =>
+      println(
+        "usage: co_bench <chan|pingpong|chain|spawn|parked|select|select_suspend>",
+      )
   }
 }

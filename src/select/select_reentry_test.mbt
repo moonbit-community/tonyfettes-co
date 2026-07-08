@@ -9,18 +9,18 @@ test "select: mapper re-entering a sibling case must not consume it" {
   let log : Array[String] = []
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="selector", () => {
-    let r = @select.select([
-      a.on_recv(x => {
+    let r = @select.select <| selector => {
+      a.recv_map_to(selector) <| x => {
         log.push("mapA(\{x})")
         // re-enter a sibling case of the same select while A is being claimed
         b.send(99)
         "A:\{x}"
-      }),
-      b.on_recv(y => {
+      }
+      b.recv_map_to(selector) <| y => {
         log.push("mapB(\{y})")
         "B:\{y}"
-      }),
-    ])
+      }
+    }
     result.set(r)
   })
   // `selector` is now suspended with readers registered on both `a` and `b`.

@@ -3,3 +3,7 @@ import {
   "tonyfettes/co/coroutine",
   "tonyfettes/co/select",
 }
+
+options(
+  overrides: [ "tonyfettes/co/runtime/abort" ],
+)

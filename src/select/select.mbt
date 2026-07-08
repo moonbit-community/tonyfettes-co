@@ -1,63 +1,43 @@
 ///|
-pub(all) struct Pollable[T]((Selected[T]) -> Unit)
-
-///|
-priv enum SelectedState[T] {
-  Available
-  Claimed
-  Occupied(T)
-  Deferred(() -> T)
+pub(all) struct Selector[T] {
+  mut coroutine : @coroutine.Coroutine?
+  mut completed : Bool
+  mut value : T?
+  mut thunk : (() -> T)?
 }
 
 ///|
-struct Selected[T] {
-  mut state : SelectedState[T]
+pub fn[T] Selector::Selector() -> Selector[T] {
+  { coroutine: None, completed: false, value: None, thunk: None }
 }
 
 ///|
-fn[T] Selected::Selected() -> Selected[T] {
-  { state: Available }
-}
-
-///|
-struct Claim[T](Selected[T])
-
-///|
-pub fn[T] Claim::resolve(self : Claim[T], value : T) -> Unit {
-  self.0.state = Occupied(value)
-}
-
-///|
-pub fn[T] Claim::deferred(self : Claim[T], thunk : () -> T) -> Unit {
-  self.0.state = Deferred(thunk)
-}
-
-///|
-pub fn[T] Selected::claim(self : Selected[T]) -> Claim[T]? {
-  match self.state {
-    Available => {
-      self.state = Claimed
-      Some(self)
-    }
-    Claimed | Occupied(_) | Deferred(_) => None
+pub fn[T] Selector::wait(self : Selector[T]) -> T {
+  if self.value is Some(value) {
+    return value
   }
-}
-
-///|
-pub fn[R] select(pollables : Array[Pollable[R]]) -> R {
-  let selected = Selected()
-  for pollable in pollables {
-    pollable(selected)
-    match selected.state {
-      Occupied(value) => return value
-      Deferred(thunk) => return thunk()
-      Available | Claimed => continue
-    }
+  if self.thunk is Some(thunk) {
+    let value = thunk()
+    self.value = Some(value)
+    return value
   }
+  self.coroutine = Some(@coroutine.current())
   @coroutine.suspend()
-  match selected.state {
-    Occupied(value) => return value
-    Deferred(thunk) => return thunk()
-    Available | Claimed => abort("@tonyfettes/co: select woke up without value")
+  if self.value is Some(value) {
+    return value
   }
+  if self.thunk is Some(thunk) {
+    let value = thunk()
+    self.value = Some(value)
+    return value
+  }
+  abort("@tonyfettes/co/select: Selector woke up without value")
+}
+
+///|
+#locals(f)
+pub fn[R] select(f : (Selector[R]) -> Unit) -> R {
+  let selector = Selector()
+  f(selector)
+  selector.wait()
 }

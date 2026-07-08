@@ -5,10 +5,10 @@ test "select" {
   let str_chan = @channel.Channel::new()
   str_chan.send("string")
   inspect(
-    @select.select <| [
-      int_chan.on_recv() <| int => { int.to_string() },
-      str_chan.on_recv() <| str => { str },
-    ],
+    @select.select <| selector => {
+      int_chan.recv_map_to(selector) <| int => { int.to_string() }
+      str_chan.recv_to(selector)
+    },
     content=(
       #|3
     ),

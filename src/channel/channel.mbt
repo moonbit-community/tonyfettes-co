@@ -6,8 +6,9 @@ struct Channel[T] {
 
 ///|
 priv enum Reader[T] {
-  Receiver(@coroutine.Coroutine, mut value~ : T?)
-  Pollable((T) -> Bool)
+  Recv(@coroutine.Coroutine, mut value~ : T?)
+  RecvTo(@select.Selector[T])
+  RecvMapTo((T) -> Bool)
 }
 
 ///|
@@ -19,12 +20,21 @@ pub fn[T] Channel::new() -> Channel[T] {
 pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
   while self.readers.pop_front() is Some(reader) {
     match reader {
-      Receiver(coroutine, value=_) as receiver => {
+      Recv(coroutine, value=_) as receiver => {
         receiver.value = Some(value)
         coroutine.schedule()
         break
       }
-      Pollable(func) => if func(value) { break } else { continue }
+      RecvTo({ completed: false, coroutine, .. } as selected) => {
+        selected.completed = true
+        if coroutine is Some(coroutine) {
+          coroutine.schedule()
+        }
+        selected.value = Some(value)
+        break
+      }
+      RecvMapTo(func) if func(value) => break
+      _ => continue
     }
   } nobreak {
     self.values.push_back(value)
@@ -32,30 +42,42 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
 }
 
 ///|
-pub fn[T, R] Channel::on_recv(
+pub fn[T] Channel::recv_to(
   self : Channel[T],
+  selected : @select.Selector[T],
+) -> Unit {
+  guard !selected.completed else { return }
+  if self.values.pop_front() is Some(value) {
+    selected.completed = true
+    selected.value = Some(value)
+    return
+  }
+  self.readers.push_back(RecvTo(selected))
+}
+
+///|
+pub fn[T, R] Channel::recv_map_to(
+  self : Channel[T],
+  selected : @select.Selector[R],
   f : (T) -> R,
-) -> @select.Pollable[R] {
-  Pollable(selected => {
-    if self.values.pop_front() is Some(value) {
-      if selected.claim() is Some(claim) {
-        claim.resolve(f(value))
+) -> Unit {
+  guard !selected.completed else { return }
+  if self.values.pop_front() is Some(value) {
+    selected.completed = true
+    selected.value = Some(f(value))
+    return
+  }
+  self.readers.push_back(
+    RecvMapTo(value => {
+      guard !selected.completed else { false }
+      selected.completed = true
+      if selected.coroutine is Some(coroutine) {
+        coroutine.schedule()
       }
-      return
-    }
-    let coroutine = @coroutine.current()
-    self.readers.push_back(
-      Pollable(val => {
-        if selected.claim() is Some(claim) {
-          claim.deferred(() => f(val))
-          coroutine.schedule()
-          true
-        } else {
-          false
-        }
-      }),
-    )
-  })
+      selected.thunk = Some(() => f(value))
+      true
+    }),
+  )
 }
 
 ///|
@@ -63,10 +85,10 @@ pub fn[T] Channel::recv(self : Channel[T]) -> T {
   if self.values.pop_front() is Some(value) {
     return value
   }
-  let reader = Receiver(@coroutine.current(), value=None)
+  let reader = Recv(@coroutine.current(), value=None)
   self.readers.push_back(reader)
   @coroutine.suspend()
-  guard reader is Receiver(_, value~) && value is Some(value) else {
+  guard reader is Recv(_, value~) && value is Some(value) else {
     abort("@tonyfettes/co: recv woke up but no value available")
   }
   value
