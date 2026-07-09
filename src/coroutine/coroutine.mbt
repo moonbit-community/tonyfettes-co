@@ -54,7 +54,7 @@ fn State::to_string(self : State) -> String {
 
 ///|
 struct Coroutine {
-  name : String
+  mut name : String
   mut state : State
   context : Context
   stack : Stack?
@@ -62,12 +62,12 @@ struct Coroutine {
   // the coroutine: `co_reset` returns to the creator on the *first suspend* (not just
   // on completion), which would otherwise decref the only remaining reference to
   // `f` — and with it any values `f` captured — while the coroutine is still
-  // suspended and about to resume. See Coroutine::new.
-  func : (() -> Unit)?
+  // suspended and about to resume. See Coroutine::Coroutine.
+  mut func : (() -> Unit)?
 }
 
 ///|
-fn create(
+fn Coroutine::new(
   name~ : String,
   state~ : State,
   stack? : Stack,
@@ -80,12 +80,41 @@ fn create(
 priv struct Scheduler {
   mut current : Coroutine
   ready : @deque.Deque[Coroutine]
+  recycled : Array[Coroutine]
 }
 
 ///|
 fn Scheduler::new() -> Scheduler {
-  let main = create(name="main", state=Running)
-  Scheduler::{ current: main, ready: @deque.Deque([]) }
+  let main = Coroutine::new(name="main", state=Running)
+  Scheduler::{ current: main, ready: @deque.Deque([]), recycled: [] }
+}
+
+///|
+fn Scheduler::allocate(
+  self : Scheduler,
+  name~ : String,
+  state~ : State,
+  func~ : () -> Unit,
+) -> Coroutine {
+  if self.recycled.pop() is Some(coroutine) {
+    coroutine.name = name
+    coroutine.state = state
+    coroutine.func = Some(func)
+    return coroutine
+  }
+  let stack = Stack::new(DEFAULT_STACK_SIZE)
+  Coroutine::new(name~, state~, stack~, func~)
+}
+
+///|
+const RECYCLED_COROUTINE_LIMIT : Int = 16
+
+///|
+fn Scheduler::recycle(self : Scheduler, coroutine : Coroutine) -> Unit {
+  guard self.recycled.length() < RECYCLED_COROUTINE_LIMIT else { return }
+  coroutine.state = Stopped
+  coroutine.func = None
+  self.recycled.push(coroutine)
 }
 
 ///|
@@ -150,23 +179,24 @@ pub fn Coroutine::schedule(self : Coroutine) -> Unit {
 }
 
 ///|
+const DEFAULT_STACK_SIZE : UInt64 = 65536
+
+///|
 #callsite(autofill(loc))
-pub fn spawn(
+pub fn Coroutine::Coroutine(
   loc~ : SourceLoc,
   name? : String = loc.to_string(),
-  stack_size? : UInt64 = 65536,
   f : () -> Unit,
 ) -> Coroutine {
   let creator = scheduler.current
-  let stack = Stack::new(stack_size)
-  let coroutine = create(name~, state=Running, stack~, func=f)
+  let coroutine = scheduler.allocate(name~, state=Running, func=f)
   creator.state = Scheduled
   scheduler.schedule(creator)
   scheduler.current = coroutine
   // Note: unlike co_shift in schedule(), we don't need ignore(callee.stack)
   // here because #borrow(stack) on co_reset keeps the `stack` parameter alive
   // across the call, preventing munmap even if `callee` is decreffed early.
-  co_reset(creator.context, stack, f => f(), () => {
+  co_reset(creator.context, coroutine.stack.unwrap(), f => f(), () => {
     // Run the body through the coroutine, which owns it: the parameter `f` is
     // decref'd when co_reset returns to the creator on the first suspend, so the
     // coroutine must be the reference that keeps the body (and its captures) alive.
@@ -181,8 +211,8 @@ pub fn spawn(
         "@tonyfettes/co/coroutine: coroutine \{coroutine.name} not Running at completion (\{coroutine.state.to_string()})",
       )
     }
-    coroutine.state = Stopped
     let next = scheduler.next()
+    scheduler.recycle(coroutine)
     next.state = Running
     next.context
   })

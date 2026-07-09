@@ -8,7 +8,7 @@ test "select: mapper re-entering a sibling case must not consume it" {
   let b : @channel.Channel[Int] = @channel.Channel::new()
   let log : Array[String] = []
   let result = @future.Future::new()
-  let _ = @coroutine.spawn(name="selector", () => {
+  let _ = @coroutine.Coroutine(name="selector", () => {
     let r = @select.select <| selector => {
       a.recv_map_to(selector) <| x => {
         log.push("mapA(\{x})")
