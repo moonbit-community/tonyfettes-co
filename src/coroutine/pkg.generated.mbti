@@ -2,13 +2,13 @@
 package "tonyfettes/co/coroutine"
 
 // Values
-#callsite(autofill(loc))
-pub fn spawn(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Coroutine
 
 // Errors
 
 // Types and methods
 type Coroutine
+#callsite(autofill(loc))
+pub fn Coroutine::Coroutine(loc~ : SourceLoc, name? : String, () -> Unit) -> Self
 #as_free_fn
 #deprecated
 pub fn Coroutine::current() -> Self

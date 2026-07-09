@@ -45,7 +45,7 @@ fn bench_chan() -> Unit {
 fn bench_pingpong() -> Unit {
   let ping : @channel.Channel[Int] = @channel.Channel::new()
   let pong : @channel.Channel[Int] = @channel.Channel::new()
-  let _ = @coroutine.spawn(name="echo", () => {
+  let _ = @coroutine.Coroutine(name="echo", () => {
     for _ in 0..<PINGPONG_ROUNDS {
       pong.send(ping.recv())
     }
@@ -76,7 +76,7 @@ fn chain(
 fn bench_chain() -> Unit {
   let ping : @channel.Channel[Int] = @channel.Channel::new()
   let pong : @channel.Channel[Int] = @channel.Channel::new()
-  let _ = @coroutine.spawn(name="echo", () => {
+  let _ = @coroutine.Coroutine(name="echo", () => {
     for _ in 0..<CHAIN_ROUNDS {
       ignore(chain(CHAIN_DEPTH, ping, pong))
     }
@@ -92,7 +92,7 @@ fn bench_chain() -> Unit {
 fn bench_spawn() -> Unit {
   let mut count = 0
   for _ in 0..<SPAWN_TASKS {
-    let _ = @coroutine.spawn(name="t", () => count += 1)
+    let _ = @coroutine.Coroutine(name="t", () => count += 1)
   }
   if count != SPAWN_TASKS {
     println("spawn mismatch: \{count}")
@@ -107,7 +107,7 @@ fn bench_spawn() -> Unit {
 fn bench_parked() -> Unit {
   let parked : Array[@coroutine.Coroutine] = []
   for _ in 0..<PARKED_TASKS {
-    parked.push(@coroutine.spawn(name="p", () => @coroutine.suspend()))
+    parked.push(@coroutine.Coroutine(name="p", () => @coroutine.suspend()))
   }
   if parked.length() != PARKED_TASKS {
     println("parked mismatch: \{parked.length()}")
@@ -149,7 +149,7 @@ fn bench_select() -> Unit {
 fn bench_select_suspend() -> Unit {
   let ping : @channel.Channel[Int] = @channel.Channel::new()
   let pong : @channel.Channel[Int] = @channel.Channel::new()
-  let _ = @coroutine.spawn(name="echo", () => {
+  let _ = @coroutine.Coroutine(name="echo", () => {
     for _ in 0..<SELECT_ROUNDS {
       pong.send(@select.select(s => ping.recv_map_to(s, x => x)))
     }
