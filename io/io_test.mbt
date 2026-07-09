@@ -33,7 +33,7 @@ test "concurrent IO" {
   let f2 = @future.Promise::new()
   let buf1 = FixedArray::make(64, b'\x00')
   let buf2 = FixedArray::make(64, b'\x00')
-  let _ = @coroutine.Coroutine::new(() => {
+  let _ = @coroutine.spawn(() => {
     let fd = @io.open(path) catch {
       error => {
         f1.reject(error)
@@ -52,7 +52,7 @@ test "concurrent IO" {
       n => f1.resolve(n)
     }
   })
-  let _ = @coroutine.Coroutine::new(() => {
+  let _ = @coroutine.spawn(() => {
     let fd = @io.open(path) catch {
       error => {
         f2.reject(error)

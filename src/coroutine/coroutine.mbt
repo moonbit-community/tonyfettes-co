@@ -67,7 +67,7 @@ struct Coroutine {
 }
 
 ///|
-fn Coroutine::raw(
+fn create(
   name~ : String,
   state~ : State,
   stack? : Stack,
@@ -78,14 +78,14 @@ fn Coroutine::raw(
 
 ///|
 priv struct Scheduler {
-  curr : Ref[Coroutine]
+  mut current : Coroutine
   ready : @deque.Deque[Coroutine]
 }
 
 ///|
 fn Scheduler::new() -> Scheduler {
-  let main = Coroutine::raw(name="main", state=Running)
-  Scheduler::{ curr: Ref(main), ready: @deque.Deque([]) }
+  let main = create(name="main", state=Running)
+  Scheduler::{ current: main, ready: @deque.Deque([]) }
 }
 
 ///|
@@ -115,7 +115,7 @@ fn Scheduler::schedule(self : Scheduler, coroutine : Coroutine) -> Unit {
 #as_free_fn
 #deprecated("Use @coroutine.current()")
 pub fn Coroutine::current() -> Coroutine {
-  scheduler.curr.val
+  scheduler.current
 }
 
 ///|
@@ -126,7 +126,7 @@ pub fn Coroutine::current() -> Coroutine {
 #as_free_fn
 #deprecated("Use @coroutine.suspend()")
 pub fn Coroutine::suspend() -> Unit {
-  let prev = scheduler.curr.val
+  let prev = scheduler.current
   prev.state = Suspended
   let next = scheduler.next()
   next.state = Running
@@ -137,7 +137,7 @@ pub fn Coroutine::suspend() -> Unit {
   // Set current to ourselves — also done AFTER co_shift (on our own stack)
   // rather than BEFORE (on the switcher's stack), so that the decref of the old
   // current.val never happens on a stack that's about to be freed.
-  scheduler.curr.val = prev
+  scheduler.current = prev
   ignore(next.stack)
 }
 
@@ -151,18 +151,18 @@ pub fn Coroutine::schedule(self : Coroutine) -> Unit {
 
 ///|
 #callsite(autofill(loc))
-pub fn Coroutine::new(
+pub fn spawn(
   loc~ : SourceLoc,
   name? : String = loc.to_string(),
   stack_size? : UInt64 = 65536,
   f : () -> Unit,
 ) -> Coroutine {
-  let creator = scheduler.curr.val
+  let creator = scheduler.current
   let stack = Stack::new(stack_size)
-  let coroutine = Coroutine::raw(name~, state=Running, stack~, func=f)
+  let coroutine = create(name~, state=Running, stack~, func=f)
   creator.state = Scheduled
   scheduler.schedule(creator)
-  scheduler.curr.val = coroutine
+  scheduler.current = coroutine
   // Note: unlike co_shift in schedule(), we don't need ignore(callee.stack)
   // here because #borrow(stack) on co_reset keeps the `stack` parameter alive
   // across the call, preventing munmap even if `callee` is decreffed early.
@@ -192,6 +192,6 @@ pub fn Coroutine::new(
   // stack, same as after co_shift in suspend().
   creator.context.release()
   // Set current to ourselves — same logic as after co_shift in suspend().
-  scheduler.curr.val = creator
+  scheduler.current = creator
   coroutine
 }
