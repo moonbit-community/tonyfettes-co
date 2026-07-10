@@ -1,27 +1,42 @@
 #ifndef MOONBIT_CO_IO_H
 #define MOONBIT_CO_IO_H
 
-#include <moonbit.h>
 #include <fcntl.h>
+#include <moonbit.h>
 #include <stdint.h>
+
+typedef moonbit_bytes_t moonbit_co_os_string_t;
+
+typedef int moonbit_co_io_handle_t;
 
 struct moonbit_co_io;
 
-// Decode a MoonBit FixedArray[Byte] of boolean flags into POSIX O_* flags.
-// Layout: [read, write, append, create, truncate, exclusive]
-static inline int
-decode_open_flags(const uint8_t *flags) {
-  int has_read = flags[0];
-  int has_write = flags[1];
-  int posix_flags = (has_read && has_write) ? O_RDWR
-                    : has_write              ? O_WRONLY
-                                             : O_RDONLY;
-  if (flags[2]) posix_flags |= O_APPEND;
-  if (flags[3]) posix_flags |= O_CREAT;
-  if (flags[4]) posix_flags |= O_TRUNC;
-  if (flags[5]) posix_flags |= O_EXCL;
-  return posix_flags;
-}
+struct moonbit_co_coroutine;
+
+typedef enum moonbit_co_io_create_mode {
+  MoonbitCoIoCreateOpenExisting = 0,
+  MoonbitCoIoCreateTruncateExisting = 1,
+  MoonbitCoIoCreateOpenOrCreate = 2,
+  MoonbitCoIoCreateCreateOrTruncate = 3,
+  MoonbitCoIoCreateCreateNew = 4,
+} moonbit_co_io_create_mode_t;
+
+typedef enum moonbit_co_io_access_mode {
+  MoonbitCoIoAccessReadOnly = 0,
+  MoonbitCoIoAccessWriteOnly = 1,
+  MoonbitCoIoAccessReadWrite = 2,
+} moonbit_co_io_access_mode_t;
+
+typedef enum moonbit_co_io_sync_mode {
+  MoonbitCoIoSyncNone = 0,
+  MoonbitCoIoSyncData = 1,
+  MoonbitCoIoSyncFull = 2,
+} moonbit_co_io_sync_mode_t;
+
+struct moonbit_co_io_result {
+  uint64_t value;
+  uint64_t error;
+};
 
 MOONBIT_FFI_EXPORT
 struct moonbit_co_io *
@@ -31,55 +46,55 @@ MOONBIT_FFI_EXPORT
 void
 moonbit_co_io_submit_open(
   struct moonbit_co_io *io,
-  const char *path,
-  const uint8_t *flags,
-  uint64_t *value,
-  int32_t *error,
-  void *task
+  moonbit_co_os_string_t path,
+  moonbit_co_io_access_mode_t access,
+  moonbit_co_io_create_mode_t create,
+  int32_t append,
+  moonbit_co_io_sync_mode_t sync,
+  int32_t at,
+  moonbit_co_io_handle_t directory,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
 );
 
 MOONBIT_FFI_EXPORT
 void
 moonbit_co_io_submit_read(
   struct moonbit_co_io *io,
-  uint64_t handle,
-  void *buffer,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
-  uint64_t *value,
-  int32_t *error,
-  void *task
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
 );
 
 MOONBIT_FFI_EXPORT
 void
 moonbit_co_io_submit_write(
   struct moonbit_co_io *io,
-  uint64_t handle,
-  const void *buffer,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
-  uint64_t *value,
-  int32_t *error,
-  void *task
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
 );
 
 MOONBIT_FFI_EXPORT
 void
 moonbit_co_io_submit_close(
   struct moonbit_co_io *io,
-  uint64_t handle,
-  uint64_t *value,
-  int32_t *error,
-  void *task
+  moonbit_co_io_handle_t handle,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
 );
 
 MOONBIT_FFI_EXPORT
-void
+int32_t
 moonbit_co_io_poll(
   struct moonbit_co_io *io,
-  void **tasks,
-  int32_t *count,
+  struct moonbit_co_coroutine **tasks,
   int64_t timeout
 );
 

@@ -1,11 +1,46 @@
 ///|
-struct Handle(UInt64)
+#cfg(not(platform="windows"))
+struct Handle(Int)
 
 ///|
-priv type Io
+#cfg(platform="windows")
+#external
+type Handle
 
 ///|
-extern "c" fn Io::new() -> Io = "moonbit_co_io_create"
+#cfg(not(platform="windows"))
+let invalid_handle : Handle = Handle(-1)
+
+///|
+#cfg(platform="windows")
+extern "c" fn co_io_invalid_handle() -> Handle = "moonbit_co_io_invalid_handle"
+
+///|
+#cfg(platform="windows")
+let invalid_handle : Handle = co_io_invalid_handle()
+
+///|
+priv type IoContext
+
+///|
+priv struct IoResult(FixedArray[UInt64])
+
+///|
+fn IoResult::new() -> IoResult {
+  [0, 0]
+}
+
+///|
+fn IoResult::value(self : IoResult) -> UInt64 raise Errno {
+  match self.0 {
+    [value, 0] => return value
+    [_, errno] => raise Errno(errno.to_int())
+    _ => abort("unreachable")
+  }
+}
+
+///|
+extern "c" fn IoContext::new() -> IoContext = "moonbit_co_io_create"
 
 ///|
 pub(all) suberror Errno {
@@ -13,61 +48,60 @@ pub(all) suberror Errno {
 } derive(Debug)
 
 ///|
-#borrow(flags)
-#owned(io, path, value, error, coroutine)
+#owned(context, path, result, coroutine)
 extern "c" fn submit_open(
-  io : Io,
-  path : Bytes,
-  flags : FixedArray[Byte],
-  value : Ref[UInt64],
-  error : Ref[Int],
+  context : IoContext,
+  path : @os_string.OsString,
+  access~ : AccessMode,
+  create~ : CreateMode,
+  append~ : Bool,
+  sync~ : SyncMode,
+  at~ : Handle,
+  directory~ : Bool,
+  result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_open"
 
 ///|
-#owned(io, buffer, value, error, coroutine)
+#owned(io, buffer, result, coroutine)
 extern "c" fn submit_read(
-  io : Io,
-  handle : UInt64,
-  buffer : FixedArray[Byte],
-  offset : Int,
-  length : Int,
-  value : Ref[UInt64],
-  error : Ref[Int],
+  io : IoContext,
+  handle : Handle,
+  buffer~ : FixedArray[Byte],
+  offset~ : Int,
+  length~ : Int,
+  result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_read"
 
 ///|
-#owned(io, buffer, value, error, coroutine)
+#owned(io, buffer, result, coroutine)
 extern "c" fn submit_write(
-  io : Io,
-  handle : UInt64,
-  buffer : Bytes,
-  offset : Int,
-  length : Int,
-  value : Ref[UInt64],
-  error : Ref[Int],
+  io : IoContext,
+  handle : Handle,
+  buffer~ : Bytes,
+  offset~ : Int,
+  length~ : Int,
+  result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_write"
 
 ///|
-#owned(io, value, error, coroutine)
+#owned(io, result, coroutine)
 extern "c" fn submit_close(
-  io : Io,
-  handle : UInt64,
-  value : Ref[UInt64],
-  error : Ref[Int],
+  io : IoContext,
+  handle : Handle,
+  result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_close"
 
 ///|
-#borrow(io, coroutines, length)
+#borrow(io, coroutines)
 extern "c" fn io_poll(
-  io : Io,
+  io : IoContext,
   coroutines : FixedArray[@coroutine.Coroutine],
-  length : Ref[Int],
   timeout : Int64,
-) = "moonbit_co_io_poll"
+) -> Int = "moonbit_co_io_poll"
 
 ///|
 /// POSIX `EINVAL`, raised for out-of-range offset/length arguments before they
@@ -76,56 +110,112 @@ extern "c" fn io_poll(
 const EINVAL : Int = 22
 
 ///|
-let max_completions : Int = 256
+const MaxCompletions : Int = 256
 
 ///|
-let io : Io = Io::new()
+let io : IoContext = IoContext::new()
 
 ///|
 let poll_coroutines : FixedArray[@coroutine.Coroutine] = FixedArray::make(
-  max_completions,
+  MaxCompletions,
   @coroutine.current(),
 )
 
 ///|
 pub fn suspend() -> Unit {
-  let length = Ref(max_completions)
-  io_poll(io, poll_coroutines, length, -1)
-  for i in 0..<length.val {
+  let length = io_poll(io, poll_coroutines, -1)
+  for i in 0..<length {
     poll_coroutines[i].schedule()
   }
 }
 
 ///|
-pub fn open(
-  path : Bytes,
-  read? : Bool = true,
-  write? : Bool = false,
-  append? : Bool = false,
-  create? : Bool = false,
-  truncate? : Bool = false,
-  exclusive? : Bool = false,
-) -> Handle raise Errno {
-  let value = Ref(0UL)
-  let error = Ref(0)
-  let flags : FixedArray[Byte] = [
-    read.to_int().to_byte(),
-    write.to_int().to_byte(),
-    append.to_int().to_byte(),
-    create.to_int().to_byte(),
-    truncate.to_int().to_byte(),
-    exclusive.to_int().to_byte(),
-  ]
-  submit_open(io, path, flags, value, error, @coroutine.current())
-  @coroutine.suspend()
-  if error.val != 0 {
-    raise Errno(error.val)
-  }
-  Handle(value.val)
+pub(all) enum CreateMode {
+  OpenExisting = 0
+  TruncateExisting = 1
+  OpenOrCreate = 2
+  CreateOrTruncate = 3
+  CreateNew = 4
 }
 
 ///|
-pub fn read(
+pub(all) enum AccessMode {
+  ReadOnly = 0
+  WriteOnly = 1
+  ReadWrite = 2
+}
+
+///|
+pub(all) enum SyncMode {
+  None = 0
+  Data = 1
+  Full = 2
+}
+
+///|
+struct Directory(Handle)
+
+///|
+struct File(Handle)
+
+///|
+pub fn File::handle(self : File) -> Handle {
+  self.0
+}
+
+///|
+pub fn File::close(self : File) -> Unit raise Errno {
+  self.0.close()
+}
+
+///|
+pub fn File::open(
+  path : @os_string.OsString,
+  access? : AccessMode = ReadOnly,
+  create? : CreateMode = OpenExisting,
+  append? : Bool = false,
+  sync? : SyncMode = None,
+  at? : Directory = invalid_handle,
+) -> File raise Errno {
+  let result = IoResult::new()
+  submit_open(
+    io,
+    path,
+    access~,
+    create~,
+    append~,
+    sync~,
+    at=at.0,
+    directory=false,
+    result,
+    @coroutine.current(),
+  )
+  @coroutine.suspend()
+  Handle(result.value().to_int())
+}
+
+///|
+pub fn File::read(
+  self : File,
+  buffer : FixedArray[Byte],
+  offset? : Int = 0,
+  length? : Int = buffer.length() - offset,
+) -> Int raise Errno {
+  self.0.read(buffer, offset~, length~)
+}
+
+///|
+pub fn File::write(
+  self : File,
+  buffer : Bytes,
+  offset? : Int = 0,
+  length? : Int = buffer.length() - offset,
+) -> Int raise Errno {
+  self.0.write(buffer, offset~, length~)
+}
+
+///|
+pub fn Handle::read(
   handle : Handle,
   buffer : FixedArray[Byte],
   offset? : Int = 0,
@@ -134,27 +224,22 @@ pub fn read(
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
-  let value = Ref(0UL)
-  let error = Ref(0)
+  let result = IoResult::new()
   submit_read(
     io,
-    handle.0,
-    buffer,
-    offset,
-    length,
-    value,
-    error,
+    handle,
+    buffer~,
+    offset~,
+    length~,
+    result,
     @coroutine.current(),
   )
   @coroutine.suspend()
-  if error.val != 0 {
-    raise Errno(error.val)
-  }
-  value.val.to_int()
+  result.value().to_int()
 }
 
 ///|
-pub fn write(
+pub fn Handle::write(
   handle : Handle,
   buffer : Bytes,
   offset? : Int = 0,
@@ -163,32 +248,24 @@ pub fn write(
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
-  let value = Ref(0UL)
-  let error = Ref(0)
+  let result = IoResult::new()
   submit_write(
     io,
-    handle.0,
-    buffer,
-    offset,
-    length,
-    value,
-    error,
+    handle,
+    buffer~,
+    offset~,
+    length~,
+    result,
     @coroutine.current(),
   )
   @coroutine.suspend()
-  if error.val != 0 {
-    raise Errno(error.val)
-  }
-  value.val.to_int()
+  result.value().to_int()
 }
 
 ///|
-pub fn close(handle : Handle) -> Unit raise Errno {
-  let value = Ref(0UL)
-  let error = Ref(0)
-  submit_close(io, handle.0, value, error, @coroutine.current())
+pub fn Handle::close(handle : Handle) -> Unit raise Errno {
+  let result = IoResult::new()
+  submit_close(io, handle, result, @coroutine.current())
   @coroutine.suspend()
-  if error.val != 0 {
-    raise Errno(error.val)
-  }
+  result.value() |> ignore()
 }

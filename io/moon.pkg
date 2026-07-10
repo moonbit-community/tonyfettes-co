@@ -1,5 +1,6 @@
 import {
   "tonyfettes/co/coroutine",
+  "tonyfettes/co-io/os_string",
 }
 
 import {
