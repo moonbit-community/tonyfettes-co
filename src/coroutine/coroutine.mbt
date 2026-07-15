@@ -141,14 +141,11 @@ fn Coroutine::raise_pending_error(self : Coroutine) -> Unit raise {
 /// Pick the next ready coroutine, polling the runtime if none are available.
 fn Scheduler::next(self : Scheduler) -> Coroutine raise {
   for candidate = self.ready.pop_front() {
-    match candidate {
-      Some(next) => break next
-      None =>
-        match @runtime.suspend() {
-          Ok(_) => continue self.ready.pop_front()
-          Err(error) => raise error
-        }
+    if candidate is Some(next) {
+      break next
     }
+    @runtime.suspend()
+    continue self.ready.pop_front()
   }
 }
 

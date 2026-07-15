@@ -1,4 +1,5 @@
 ///|
-pub fn suspend() -> Result[Unit, Error] {
+pub fn suspend() -> Unit raise {
   abort("@tonyfettes/co/runtime: deadlock")
+  fail("unreachable")
 }

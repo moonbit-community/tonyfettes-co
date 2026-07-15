@@ -1,8 +1,4 @@
 ///|
-pub fn suspend() -> Result[Unit, Error] {
-  try @io.suspend() catch {
-    error => Err(error)
-  } noraise {
-    _ => Ok(())
-  }
+pub fn suspend() -> Unit raise {
+  @io.suspend()
 }
