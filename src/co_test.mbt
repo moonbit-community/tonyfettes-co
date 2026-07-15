@@ -2,6 +2,35 @@
 using @test {assert_eq}
 
 ///|
+priv suberror CoroutineTestError derive(Debug)
+
+///|
+test "Coroutine: errors cross the native trampoline" {
+  let error = @test.expect_error(() => {
+    ignore(@coroutine.Coroutine(name="raises", () => raise CoroutineTestError))
+  })
+  assert_true(error is CoroutineTestError)
+
+  let gate : @channel.Channel[Unit] = @channel.Channel::new()
+  let never : @future.Future[Int] = @future.Future::new()
+  ignore(
+    @coroutine.Coroutine(name="raises-after-suspend", () => {
+      gate.recv() |> ignore()
+      raise CoroutineTestError
+    }),
+  )
+  gate.send(())
+  let error = @test.expect_error(() => never.wait() |> ignore())
+  assert_true(error is CoroutineTestError)
+
+  // The creator and scheduler must both remain usable after the error crosses
+  // the co_reset callback boundary.
+  let result = @future.Future::new()
+  ignore(@coroutine.Coroutine(name="after-error", () => result.set(42)))
+  assert_eq(result.wait(), 42)
+}
+
+///|
 test "Channel" {
   let chan = @channel.Channel::new()
   let done = @channel.Channel::new()

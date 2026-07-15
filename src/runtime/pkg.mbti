@@ -2,7 +2,9 @@
 package "tonyfettes/co/runtime"
 
 // Values
-pub fn suspend() -> Unit
+/// Poll for external wakeups, returning a runtime failure without interpreting
+/// it as a completion count.
+pub fn suspend() -> Result[Unit, Error]
 
 // Errors
 

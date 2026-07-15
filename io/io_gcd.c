@@ -41,16 +41,29 @@ moonbit_co_io_finalize(void *ptr) {
     dispatch_release(io->semaphore);
 }
 
+MOONBIT_FFI_EXPORT
 struct moonbit_co_io *
-moonbit_co_io_create(void) {
+moonbit_co_io_alloc(void) {
   struct moonbit_co_io *io =
     (struct moonbit_co_io *)moonbit_make_external_object(
       moonbit_co_io_finalize, sizeof(struct moonbit_co_io)
     );
   memset(io, 0, sizeof(*io));
-  io->queue = dispatch_queue_create("co.io", DISPATCH_QUEUE_CONCURRENT);
-  io->semaphore = dispatch_semaphore_create(0);
   return io;
+}
+
+MOONBIT_FFI_EXPORT
+int32_t
+moonbit_co_io_init(struct moonbit_co_io *io) {
+  io->queue = dispatch_queue_create("co.io", DISPATCH_QUEUE_CONCURRENT);
+  if (!io->queue) {
+    return ENOMEM;
+  }
+  io->semaphore = dispatch_semaphore_create(0);
+  if (!io->semaphore) {
+    return ENOMEM;
+  }
+  return 0;
 }
 
 // -- completion ring --
@@ -126,8 +139,9 @@ moonbit_co_io_submit_open(
   if (directory) {
     flags |= O_DIRECTORY;
   }
+  int mode = (flags & O_CREAT) ? 0666 : 0;
   dispatch_async(io->queue, ^{
-    int fd = openat(at, (const char *)path, flags);
+    int fd = openat(at, (const char *)path, flags, mode);
     if (fd < 0) {
       result->value = 0;
       result->error = errno;

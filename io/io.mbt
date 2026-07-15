@@ -40,7 +40,21 @@ fn IoResult::value(self : IoResult) -> UInt64 raise Errno {
 }
 
 ///|
-extern "c" fn IoContext::new() -> IoContext = "moonbit_co_io_create"
+extern "c" fn IoContext::alloc() -> IoContext = "moonbit_co_io_alloc"
+
+///|
+#borrow(io)
+extern "c" fn io_init(io : IoContext) -> Int = "moonbit_co_io_init"
+
+///|
+fn IoContext::new() -> IoContext raise Errno {
+  let io = IoContext::alloc()
+  let errno = io_init(io)
+  if errno != 0 {
+    raise Errno(errno)
+  }
+  io
+}
 
 ///|
 pub(all) suberror Errno {
@@ -113,7 +127,15 @@ const EINVAL : Int = 22
 const MaxCompletions : Int = 256
 
 ///|
-let io : IoContext = IoContext::new()
+fn create_io_context() -> IoContext {
+  IoContext::new() catch {
+    Errno(errno) =>
+      abort("failed to initialize the I/O context: errno \{errno}")
+  }
+}
+
+///|
+let io : IoContext = create_io_context()
 
 ///|
 let poll_coroutines : FixedArray[@coroutine.Coroutine] = FixedArray::make(
@@ -122,8 +144,11 @@ let poll_coroutines : FixedArray[@coroutine.Coroutine] = FixedArray::make(
 )
 
 ///|
-pub fn suspend() -> Unit {
+pub fn suspend() -> Unit raise Errno {
   let length = io_poll(io, poll_coroutines, -1)
+  if length < 0 {
+    raise Errno(-length)
+  }
   for i in 0..<length {
     poll_coroutines[i].schedule()
   }
@@ -164,7 +189,7 @@ pub fn File::handle(self : File) -> Handle {
 }
 
 ///|
-pub fn File::close(self : File) -> Unit raise Errno {
+pub fn File::close(self : File) -> Unit raise {
   self.0.close()
 }
 
@@ -176,7 +201,7 @@ pub fn File::open(
   append? : Bool = false,
   sync? : SyncMode = None,
   at? : Directory = invalid_handle,
-) -> File raise Errno {
+) -> File raise {
   let result = IoResult::new()
   submit_open(
     io,
@@ -200,7 +225,7 @@ pub fn File::read(
   buffer : FixedArray[Byte],
   offset? : Int = 0,
   length? : Int = buffer.length() - offset,
-) -> Int raise Errno {
+) -> Int raise {
   self.0.read(buffer, offset~, length~)
 }
 
@@ -210,7 +235,7 @@ pub fn File::write(
   buffer : Bytes,
   offset? : Int = 0,
   length? : Int = buffer.length() - offset,
-) -> Int raise Errno {
+) -> Int raise {
   self.0.write(buffer, offset~, length~)
 }
 
@@ -220,7 +245,7 @@ pub fn Handle::read(
   buffer : FixedArray[Byte],
   offset? : Int = 0,
   length? : Int = buffer.length() - offset,
-) -> Int raise Errno {
+) -> Int raise {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
@@ -244,7 +269,7 @@ pub fn Handle::write(
   buffer : Bytes,
   offset? : Int = 0,
   length? : Int = buffer.length() - offset,
-) -> Int raise Errno {
+) -> Int raise {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
@@ -263,7 +288,7 @@ pub fn Handle::write(
 }
 
 ///|
-pub fn Handle::close(handle : Handle) -> Unit raise Errno {
+pub fn Handle::close(handle : Handle) -> Unit raise {
   let result = IoResult::new()
   submit_close(io, handle, result, @coroutine.current())
   @coroutine.suspend()

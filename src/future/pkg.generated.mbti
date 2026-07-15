@@ -13,15 +13,15 @@ import {
 type Future[T]
 pub fn[T] Future::new() -> Self[T]
 pub fn[T] Future::set(Self[T], T) -> Unit
-pub fn[T] Future::wait(Self[T]) -> T
-pub fn[T, R] Future::wait_map_to(Self[T], @select.Selector[R], (T) -> R) -> Unit
+pub fn[T] Future::wait(Self[T]) -> T raise
+pub fn[T, R] Future::wait_map_to(Self[T], @select.Selector[R], (T) -> R raise) -> Unit raise
 pub fn[T] Future::wait_to(Self[T], @select.Selector[T]) -> Unit
 
 type Promise[T, E]
 pub fn[T, E] Promise::new() -> Self[T, E]
 pub fn[T, E] Promise::reject(Self[T, E], E) -> Unit
 pub fn[T, E] Promise::resolve(Self[T, E], T) -> Unit
-pub fn[T, E : Error] Promise::wait(Self[T, E]) -> T raise E
+pub fn[T, E : Error] Promise::wait(Self[T, E]) -> T raise
 
 // Type aliases
 

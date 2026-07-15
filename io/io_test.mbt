@@ -104,8 +104,10 @@ test "read rejects out-of-range offset" {
   // before it reaches the native backend, not turned into a huge transfer.
   debug_inspect(
     @test.expect_error(() => file.read(buf, offset=buf.length() + 1)),
-  content=(#|Errno(22)
-  ))
+    content=(
+      #|Errno(22)
+    ),
+  )
   file.close()
 }
 

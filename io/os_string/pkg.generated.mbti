@@ -1,0 +1,20 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/co-io/os_string"
+
+import {
+  "moonbitlang/core/encoding/utf8",
+}
+
+// Values
+pub fn from_string(String) -> OsString
+
+// Errors
+
+// Types and methods
+pub(all) struct OsString(Bytes)
+pub fn OsString::to_string(Self) -> String raise @utf8.Malformed
+
+// Type aliases
+pub using @utf8 {type Malformed}
+
+// Traits

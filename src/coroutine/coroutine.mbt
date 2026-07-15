@@ -63,7 +63,10 @@ struct Coroutine {
   // on completion), which would otherwise decref the only remaining reference to
   // `f` — and with it any values `f` captured — while the coroutine is still
   // suspended and about to resume. See Coroutine::Coroutine.
-  mut func : (() -> Unit)?
+  mut func : (() -> Unit raise)?
+  // Checked errors cannot cross the native co_reset callback ABI. The callback
+  // stores one here and resumes the MoonBit stack that will raise it.
+  mut pending_error : Error?
 }
 
 ///|
@@ -71,13 +74,21 @@ fn Coroutine::new(
   name~ : String,
   state~ : State,
   stack? : Stack,
-  func? : () -> Unit,
+  func? : () -> Unit raise,
 ) -> Coroutine {
-  Coroutine::{ name, state, context: Context::new(), stack, func }
+  Coroutine::{
+    name,
+    state,
+    context: Context::new(),
+    stack,
+    func,
+    pending_error: None,
+  }
 }
 
 ///|
 priv struct Scheduler {
+  main : Coroutine
   mut current : Coroutine
   ready : @deque.Deque[Coroutine]
   recycled : Array[Coroutine]
@@ -86,7 +97,7 @@ priv struct Scheduler {
 ///|
 fn Scheduler::new() -> Scheduler {
   let main = Coroutine::new(name="main", state=Running)
-  Scheduler::{ current: main, ready: @deque.Deque([]), recycled: [] }
+  Scheduler::{ main, current: main, ready: @deque.Deque([]), recycled: [] }
 }
 
 ///|
@@ -94,12 +105,13 @@ fn Scheduler::allocate(
   self : Scheduler,
   name~ : String,
   state~ : State,
-  func~ : () -> Unit,
+  func~ : () -> Unit raise,
 ) -> Coroutine {
   if self.recycled.pop() is Some(coroutine) {
     coroutine.name = name
     coroutine.state = state
     coroutine.func = Some(func)
+    coroutine.pending_error = None
     return coroutine
   }
   let stack = Stack::new(DEFAULT_STACK_SIZE)
@@ -118,15 +130,24 @@ fn Scheduler::recycle(self : Scheduler, coroutine : Coroutine) -> Unit {
 }
 
 ///|
+fn Coroutine::raise_pending_error(self : Coroutine) -> Unit raise {
+  if self.pending_error is Some(error) {
+    self.pending_error = None
+    raise error
+  }
+}
+
+///|
 /// Pick the next ready coroutine, polling the runtime if none are available.
-fn Scheduler::next(self : Scheduler) -> Coroutine {
+fn Scheduler::next(self : Scheduler) -> Coroutine raise {
   for candidate = self.ready.pop_front() {
     match candidate {
       Some(next) => break next
-      None => {
-        @runtime.suspend()
-        continue self.ready.pop_front()
-      }
+      None =>
+        match @runtime.suspend() {
+          Ok(_) => continue self.ready.pop_front()
+          Err(error) => raise error
+        }
     }
   }
 }
@@ -154,10 +175,15 @@ pub fn Coroutine::current() -> Coroutine {
 /// otherwise it will never be woken up.
 #as_free_fn
 #deprecated("Use @coroutine.suspend()")
-pub fn Coroutine::suspend() -> Unit {
+pub fn Coroutine::suspend() -> Unit raise {
   let prev = scheduler.current
   prev.state = Suspended
-  let next = scheduler.next()
+  let next = scheduler.next() catch {
+    error => {
+      prev.state = Running
+      raise error
+    }
+  }
   next.state = Running
   co_shift(prev.context, next.context)
   // We just woke up. Drop the +1 reference the resume handed us (see co_shift).
@@ -168,6 +194,7 @@ pub fn Coroutine::suspend() -> Unit {
   // current.val never happens on a stack that's about to be freed.
   scheduler.current = prev
   ignore(next.stack)
+  prev.raise_pending_error()
 }
 
 ///|
@@ -186,8 +213,8 @@ const DEFAULT_STACK_SIZE : UInt64 = 65536
 pub fn Coroutine::Coroutine(
   loc~ : SourceLoc,
   name? : String = loc.to_string(),
-  f : () -> Unit,
-) -> Coroutine {
+  f : () -> Unit raise,
+) -> Coroutine raise {
   let creator = scheduler.current
   let coroutine = scheduler.allocate(name~, state=Running, func=f)
   creator.state = Scheduled
@@ -205,13 +232,23 @@ pub fn Coroutine::Coroutine(
         "@tonyfettes/co/coroutine: coroutine \{coroutine.name} started with no body",
       )
     }
-    body()
+    body() catch {
+      error => {
+        scheduler.main.pending_error = Some(error)
+        scheduler.main.schedule()
+      }
+    }
     guard coroutine.state is Running else {
       abort(
         "@tonyfettes/co/coroutine: coroutine \{coroutine.name} not Running at completion (\{coroutine.state.to_string()})",
       )
     }
-    let next = scheduler.next()
+    let next = scheduler.next() catch {
+      error => {
+        scheduler.main.pending_error = Some(error)
+        scheduler.main
+      }
+    }
     scheduler.recycle(coroutine)
     next.state = Running
     next.context
@@ -223,5 +260,6 @@ pub fn Coroutine::Coroutine(
   creator.context.release()
   // Set current to ourselves — same logic as after co_shift in suspend().
   scheduler.current = creator
+  creator.raise_pending_error()
   coroutine
 }

@@ -6,7 +6,7 @@ import {
 }
 
 // Values
-pub fn[R] select((Selector[R]) -> Unit) -> R
+pub fn[R] select((Selector[R]) -> Unit raise) -> R raise
 
 // Errors
 
@@ -15,10 +15,10 @@ pub(all) struct Selector[T] {
   mut coroutine : @coroutine.Coroutine?
   mut completed : Bool
   mut value : T?
-  mut thunk : (() -> T)?
+  mut thunk : (() -> T raise)?
 }
 pub fn[T] Selector::Selector() -> Self[T]
-pub fn[T] Selector::wait(Self[T]) -> T
+pub fn[T] Selector::wait(Self[T]) -> T raise
 
 // Type aliases
 

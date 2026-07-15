@@ -38,9 +38,18 @@ struct moonbit_co_io_result {
   uint64_t error;
 };
 
+// Allocate an uninitialized I/O context. Never fails; the returned object is
+// safe to finalize as-is.
 MOONBIT_FFI_EXPORT
 struct moonbit_co_io *
-moonbit_co_io_create(void);
+moonbit_co_io_alloc(void);
+
+// Initialize an allocated I/O context in place. Returns 0 on success or a
+// positive errno; a failed context is left in a state the finalizer can clean
+// up.
+MOONBIT_FFI_EXPORT
+int32_t
+moonbit_co_io_init(struct moonbit_co_io *io);
 
 MOONBIT_FFI_EXPORT
 void

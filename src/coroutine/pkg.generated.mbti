@@ -8,14 +8,14 @@ package "tonyfettes/co/coroutine"
 // Types and methods
 type Coroutine
 #callsite(autofill(loc))
-pub fn Coroutine::Coroutine(loc~ : SourceLoc, name? : String, () -> Unit) -> Self
+pub fn Coroutine::Coroutine(loc~ : SourceLoc, name? : String, () -> Unit raise) -> Self raise
 #as_free_fn
 #deprecated
 pub fn Coroutine::current() -> Self
 pub fn Coroutine::schedule(Self) -> Unit
 #as_free_fn
 #deprecated
-pub fn Coroutine::suspend() -> Unit
+pub fn Coroutine::suspend() -> Unit raise
 
 // Type aliases
 

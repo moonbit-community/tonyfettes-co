@@ -17,7 +17,7 @@ const SPAWN_TASKS : Int = 200_000
 const PARKED_TASKS : Int = 100_000
 
 ///|
-fn run(name : String, f : () -> Unit) -> Unit {
+fn run(name : String, f : () -> Unit raise) -> Unit raise {
   let ts = @bench.monotonic_clock_start()
   f()
   let us = @bench.monotonic_clock_end(ts)
@@ -26,7 +26,7 @@ fn run(name : String, f : () -> Unit) -> Unit {
 
 ///|
 /// Channel throughput without any context switch: fill then drain.
-fn bench_chan() -> Unit {
+fn bench_chan() -> Unit raise {
   let chan : @channel.Channel[Int] = @channel.Channel::new()
   for i in 0..<CHAN_OPS {
     chan.send(i)
@@ -42,7 +42,7 @@ fn bench_chan() -> Unit {
 
 ///|
 /// Two tasks bouncing a token: 2 context switches + 2 channel ops per round.
-fn bench_pingpong() -> Unit {
+fn bench_pingpong() -> Unit raise {
   let ping : @channel.Channel[Int] = @channel.Channel::new()
   let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine(name="echo", () => {
@@ -62,7 +62,7 @@ fn chain(
   depth : Int,
   ping : @channel.Channel[Int],
   pong : @channel.Channel[Int],
-) -> Int {
+) -> Int raise {
   if depth == 0 {
     pong.send(ping.recv())
     1
@@ -73,7 +73,7 @@ fn chain(
 
 ///|
 /// Same as pingpong, but the echo side suspends under a 30-frame call stack.
-fn bench_chain() -> Unit {
+fn bench_chain() -> Unit raise {
   let ping : @channel.Channel[Int] = @channel.Channel::new()
   let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine(name="echo", () => {
@@ -89,7 +89,7 @@ fn bench_chain() -> Unit {
 
 ///|
 /// Spawn a task that runs to completion immediately, N times.
-fn bench_spawn() -> Unit {
+fn bench_spawn() -> Unit raise {
   let mut count = 0
   for _ in 0..<SPAWN_TASKS {
     let _ = @coroutine.Coroutine(name="t", () => count += 1)
@@ -104,7 +104,7 @@ fn bench_spawn() -> Unit {
 /// Coroutine::suspend documents that the caller must store the handle before
 /// parking, so keep every coroutine rooted in `parked` until the function
 /// (and with it the process peak) is past the measurement point.
-fn bench_parked() -> Unit {
+fn bench_parked() -> Unit raise {
   let parked : Array[@coroutine.Coroutine] = []
   for _ in 0..<PARKED_TASKS {
     parked.push(@coroutine.Coroutine(name="p", () => @coroutine.suspend()))
@@ -123,7 +123,7 @@ const SELECT_ROUNDS : Int = 1_000_000
 ///|
 /// Two-way select where one channel is always ready: measures the per-call
 /// allocation overhead of the select machinery, no context switch.
-fn bench_select() -> Unit {
+fn bench_select() -> Unit raise {
   let a : @channel.Channel[Int] = @channel.Channel::new()
   let b : @channel.Channel[Int] = @channel.Channel::new()
   let mut sum = 0
@@ -146,7 +146,7 @@ fn bench_select() -> Unit {
 ///|
 /// Pingpong where both sides receive through select: exercises the
 /// suspend/deferred-wake path of select.
-fn bench_select_suspend() -> Unit {
+fn bench_select_suspend() -> Unit raise {
   let ping : @channel.Channel[Int] = @channel.Channel::new()
   let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine(name="echo", () => {
@@ -161,7 +161,7 @@ fn bench_select_suspend() -> Unit {
 }
 
 ///|
-fn main {
+fn main raise {
   let args = @env.args()
   let scenario = if args.length() > 0 { args[args.length() - 1] } else { "" }
   match scenario {

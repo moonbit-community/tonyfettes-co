@@ -3,18 +3,11 @@ package "tonyfettes/co-io"
 
 import {
   "moonbitlang/core/debug",
+  "tonyfettes/co-io/os_string",
 }
 
 // Values
-pub fn close(Handle) -> Unit raise Errno
-
-pub fn open(Bytes, read? : Bool, write? : Bool, append? : Bool, create? : Bool, truncate? : Bool, exclusive? : Bool) -> Handle raise Errno
-
-pub fn read(Handle, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise Errno
-
-pub fn suspend() -> Unit
-
-pub fn write(Handle, Bytes, offset? : Int, length? : Int) -> Int raise Errno
+pub fn suspend() -> Unit raise Errno
 
 // Errors
 pub(all) suberror Errno {
@@ -22,7 +15,39 @@ pub(all) suberror Errno {
 } derive(@debug.Debug)
 
 // Types and methods
+pub(all) enum AccessMode {
+  ReadOnly
+  WriteOnly
+  ReadWrite
+}
+
+pub(all) enum CreateMode {
+  OpenExisting
+  TruncateExisting
+  OpenOrCreate
+  CreateOrTruncate
+  CreateNew
+}
+
+type Directory
+
+type File
+pub fn File::close(Self) -> Unit raise
+pub fn File::handle(Self) -> Handle
+pub fn File::open(@os_string.OsString, access? : AccessMode, create? : CreateMode, append? : Bool, sync? : SyncMode, at? : Directory) -> Self raise
+pub fn File::read(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
+pub fn File::write(Self, Bytes, offset? : Int, length? : Int) -> Int raise
+
 type Handle
+pub fn Handle::close(Self) -> Unit raise
+pub fn Handle::read(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
+pub fn Handle::write(Self, Bytes, offset? : Int, length? : Int) -> Int raise
+
+pub(all) enum SyncMode {
+  None
+  Data
+  Full
+}
 
 // Type aliases
 
