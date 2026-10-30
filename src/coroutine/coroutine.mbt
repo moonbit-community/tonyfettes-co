@@ -97,7 +97,7 @@ priv struct Scheduler {
 ///|
 fn Scheduler::new() -> Scheduler {
   let main = Coroutine::new(name="main", state=Running)
-  Scheduler::{ main, current: main, ready: @deque.Deque([]), recycled: [] }
+  Scheduler::{ main, current: main, ready: @deque.Deque([]), recycled: [], }
 }
 
 ///|
@@ -119,7 +119,7 @@ fn Scheduler::allocate(
 }
 
 ///|
-const RECYCLED_COROUTINE_LIMIT : Int = 16
+const RECYCLED_COROUTINE_LIMIT : Int32 = 16
 
 ///|
 fn Scheduler::recycle(self : Scheduler, coroutine : Coroutine) -> Unit {
@@ -210,7 +210,7 @@ const DEFAULT_STACK_SIZE : UInt64 = 65536
 #callsite(autofill(loc))
 pub fn Coroutine::Coroutine(
   loc~ : SourceLoc,
-  name? : String = loc.to_string(),
+  name~ : String = loc.to_string(),
   f : () -> Unit raise,
 ) -> Coroutine raise {
   let creator = scheduler.current

@@ -8,7 +8,7 @@ pub(all) struct Selector[T] {
 
 ///|
 pub fn[T] Selector::Selector() -> Selector[T] {
-  { coroutine: None, completed: false, value: None, thunk: None }
+  { coroutine: None, completed: false, value: None, thunk: None, }
 }
 
 ///|

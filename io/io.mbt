@@ -1,6 +1,6 @@
 ///|
 #cfg(not(platform="windows"))
-struct Handle(Int)
+struct Handle(Int32)
 
 ///|
 #cfg(platform="windows")
@@ -44,7 +44,7 @@ extern "c" fn IoContext::alloc() -> IoContext = "moonbit_co_io_alloc"
 
 ///|
 #borrow(io)
-extern "c" fn io_init(io : IoContext) -> Int = "moonbit_co_io_init"
+extern "c" fn io_init(io : IoContext) -> Int32 = "moonbit_co_io_init"
 
 ///|
 fn IoContext::new() -> IoContext raise Errno {
@@ -58,7 +58,7 @@ fn IoContext::new() -> IoContext raise Errno {
 
 ///|
 pub(all) suberror Errno {
-  Errno(Int)
+  Errno(Int32)
 } derive(Debug)
 
 ///|
@@ -91,8 +91,8 @@ extern "c" fn submit_read(
   io : IoContext,
   handle : Handle,
   buffer~ : FixedArray[Byte],
-  offset~ : Int,
-  length~ : Int,
+  offset~ : Int32,
+  length~ : Int32,
   result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_read"
@@ -103,8 +103,8 @@ extern "c" fn submit_write(
   io : IoContext,
   handle : Handle,
   buffer~ : Bytes,
-  offset~ : Int,
-  length~ : Int,
+  offset~ : Int32,
+  length~ : Int32,
   result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_write"
@@ -124,16 +124,16 @@ extern "c" fn io_poll(
   io : IoContext,
   coroutines : FixedArray[@coroutine.Coroutine],
   timeout : Int64,
-) -> Int = "moonbit_co_io_poll"
+) -> Int32 = "moonbit_co_io_poll"
 
 ///|
 /// POSIX `EINVAL`, raised for out-of-range offset/length arguments before they
 /// reach the native backends (where a negative length would be reinterpreted as
 /// a huge unsigned size).
-const EINVAL : Int = 22
+const EINVAL : Int32 = 22
 
 ///|
-const MaxCompletions : Int = 256
+const MaxCompletions : Int32 = 256
 
 ///|
 fn create_io_context() -> IoContext {
@@ -205,11 +205,11 @@ pub fn File::close(self : File) -> Unit raise {
 ///|
 pub fn File::open(
   path : @os_string.OsString,
-  access? : AccessMode = ReadOnly,
-  create? : CreateMode = OpenExisting,
-  append? : Bool = false,
-  sync? : SyncMode = None,
-  at? : Directory = invalid_handle,
+  access~ : AccessMode = ReadOnly,
+  create~ : CreateMode = OpenExisting,
+  append~ : Bool = false,
+  sync~ : SyncMode = None,
+  at~ : Directory = invalid_handle,
 ) -> File raise {
   let result = IoResult::new()
   submit_open(
@@ -232,9 +232,9 @@ pub fn File::open(
 pub fn File::read(
   self : File,
   buffer : FixedArray[Byte],
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
-) -> Int raise {
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise {
   self.0.read(buffer, offset~, length~)
 }
 
@@ -242,9 +242,9 @@ pub fn File::read(
 pub fn File::write(
   self : File,
   buffer : Bytes,
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
-) -> Int raise {
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise {
   self.0.write(buffer, offset~, length~)
 }
 
@@ -252,9 +252,9 @@ pub fn File::write(
 pub fn Handle::read(
   handle : Handle,
   buffer : FixedArray[Byte],
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
-) -> Int raise {
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
@@ -276,9 +276,9 @@ pub fn Handle::read(
 pub fn Handle::write(
   handle : Handle,
   buffer : Bytes,
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
-) -> Int raise {
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }

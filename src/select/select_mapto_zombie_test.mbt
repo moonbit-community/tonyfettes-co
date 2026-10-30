@@ -3,8 +3,8 @@
 // sends: the wake-path closure has to flip the claim flag, or the zombie eats
 // the value and ghost-schedules the (already finished) selecting coroutine.
 test "recv_map_to zombie reader must not consume later sends" {
-  let a : @channel.Channel[Int] = @channel.Channel::new()
-  let b : @channel.Channel[Int] = @channel.Channel::new()
+  let a : @channel.Channel[Int32] = @channel.Channel::new()
+  let b : @channel.Channel[Int32] = @channel.Channel::new()
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(name="selector", () => {
     result.set(
