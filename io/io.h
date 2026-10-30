@@ -140,6 +140,18 @@ moonbit_co_io_submit_send(
   struct moonbit_co_coroutine *coroutine
 );
 
+// Connect `handle` to the `sockaddr` held in `addr` (a 16-byte `sockaddr_in`),
+// without blocking the thread that submits it.
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_connect(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t addr,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+);
+
 MOONBIT_FFI_EXPORT
 int32_t
 moonbit_co_io_poll(

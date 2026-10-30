@@ -55,3 +55,34 @@ test "net: end of stream reads as 0" {
   assert_eq(seen.wait(), "3,0")
   listener.close()
 }
+
+///|
+test "net: connect through the io backend, success and error" {
+  // Success path: a real listener, connect from a separate coroutine so the
+  // connect itself is driven by the io backend rather than the caller's stack.
+  let listener = @io.TcpListener::bind(@io.SocketAddr::loopback(0))
+  let addr = listener.local_addr()
+  let server : @future.Promise[Int32, Failure] = @future.Promise::new()
+  ignore(
+    @coroutine.Coroutine(name="acceptor", () => {
+      let (stream, _) = listener.accept()
+      stream.close() catch {
+        _ => ()
+      }
+      server.resolve(1)
+    }),
+  )
+  let client = @io.TcpStream::connect(addr)
+  assert_eq(server.wait(), 1)
+  client.close() catch {
+    _ => ()
+  }
+  listener.close()
+  // Error path: nothing listens on this port, so the CONNECT completion carries
+  // ECONNREFUSED and surfaces as an Errno.
+  let dead = @io.TcpListener::bind(@io.SocketAddr::loopback(0))
+  let dead_addr = dead.local_addr()
+  dead.close()
+  let error = @test.expect_error(() => @io.TcpStream::connect(dead_addr))
+  assert_true(error is @io.Errno(_))
+}

@@ -57,24 +57,34 @@ moonbit_co_net_local_port(int32_t fd) {
   return (int32_t)ntohs(addr.sin_port);
 }
 
-// Connect a new socket to ip:port. Returns the fd, or -errno.
+// A fresh unconnected stream socket. Returns the fd, or -errno.
 MOONBIT_FFI_EXPORT
 int32_t
-moonbit_co_net_connect(uint32_t ip_be, uint32_t port) {
+moonbit_co_net_socket(void) {
   int fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (fd < 0) {
     return -errno;
   }
+  return fd;
+}
+
+// Encode ip:port as a 16-byte `sockaddr_in` for the CONNECT operation. Owned by
+// the caller; the backend retains it until the completion arrives.
+MOONBIT_FFI_EXPORT
+moonbit_bytes_t
+moonbit_co_net_sockaddr_v4(uint32_t ip_be, uint32_t port) {
+  moonbit_bytes_t bytes = moonbit_make_bytes(sizeof(struct sockaddr_in), 0);
   struct sockaddr_in addr;
   fill_v4(&addr, ip_be, port);
-  if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-    int err = errno;
-    close(fd);
-    return -err;
-  }
+  memcpy(bytes, &addr, sizeof(addr));
+  return bytes;
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_net_set_nodelay(int32_t fd) {
   int one = 1;
   setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
-  return fd;
 }
 
 MOONBIT_FFI_EXPORT

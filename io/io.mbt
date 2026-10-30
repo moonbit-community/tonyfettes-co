@@ -339,6 +339,26 @@ extern "c" fn submit_send(
 ) = "moonbit_co_io_submit_send"
 
 ///|
+#owned(io, addr, result, coroutine)
+extern "c" fn submit_connect(
+  io : IoContext,
+  handle : Handle,
+  addr~ : Bytes,
+  result : IoResult,
+  coroutine : @coroutine.Coroutine,
+) = "moonbit_co_io_submit_connect"
+
+///|
+/// Connect a socket to `addr`, suspending the calling coroutine until the
+/// connection is established. `addr` is a 16-byte `sockaddr_in`.
+pub fn Handle::connect(self : Handle, addr : Bytes) -> Unit raise {
+  let result = IoResult::new()
+  submit_connect(io, self, addr~, result, @coroutine.current())
+  @coroutine.suspend()
+  result.value() |> ignore()
+}
+
+///|
 /// Accept a connection on a listening socket.
 ///
 /// Returns the new connection and the raw peer `sockaddr` (132 bytes: 128 of

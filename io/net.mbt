@@ -31,7 +31,13 @@ extern "c" fn net_listen(ip : UInt32, port : Int32, backlog : Int32) -> Int32 = 
 extern "c" fn net_local_port(fd : Int32) -> Int32 = "moonbit_co_net_local_port"
 
 ///|
-extern "c" fn net_connect(ip : UInt32, port : Int32) -> Int32 = "moonbit_co_net_connect"
+extern "c" fn net_socket() -> Int32 = "moonbit_co_net_socket"
+
+///|
+extern "c" fn net_sockaddr_v4(ip : UInt32, port : Int32) -> Bytes = "moonbit_co_net_sockaddr_v4"
+
+///|
+extern "c" fn net_set_nodelay(fd : Int32) = "moonbit_co_net_set_nodelay"
 
 ///|
 extern "c" fn net_close(fd : Int32) = "moonbit_co_net_close"
@@ -98,11 +104,16 @@ pub struct TcpStream {
 }
 
 ///|
-/// Connect to `addr`. The connection is established synchronously.
-pub fn TcpStream::connect(addr : SocketAddr) -> TcpStream raise Errno {
-  let fd = net_connect(addr.ip, addr.port)
+/// Connect to `addr`, suspending this coroutine until the connection is
+/// established. The `connect(2)` itself runs on the io backend, so the scheduler
+/// thread keeps running other coroutines meanwhile.
+pub fn TcpStream::connect(addr : SocketAddr) -> TcpStream raise {
+  let fd = net_socket()
   guard fd >= 0 else { raise Errno(-fd) }
-  { handle: Handle(fd), }
+  let handle = Handle(fd)
+  handle.connect(net_sockaddr_v4(addr.ip, addr.port))
+  net_set_nodelay(fd)
+  { handle, }
 }
 
 ///|

@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -293,6 +294,28 @@ moonbit_co_io_submit_send(
       result->error = 0;
     }
     moonbit_co_io_schedule(io, buffer, result, coroutine);
+  });
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_connect(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t addr,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  dispatch_async(io->queue, ^{
+    int r = connect((int)handle, (struct sockaddr *)addr, sizeof(struct sockaddr_in));
+    if (r < 0) {
+      result->value = 0;
+      result->error = errno;
+    } else {
+      result->value = 0;
+      result->error = 0;
+    }
+    moonbit_co_io_schedule(io, addr, result, coroutine);
   });
 }
 

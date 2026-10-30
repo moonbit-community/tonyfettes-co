@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <unistd.h>
@@ -44,10 +45,10 @@ struct moonbit_co_io_completion {
   struct moonbit_co_io_result *result;
 };
 
-// Concurrent in-flight operations this backend can track. Each parked coroutine
-// owns one slot (a pending accept/read/write), so this is also the connection
-// ceiling for the io_uring path.
-enum { MoonbitCoIoSlots = 4096 };
+// Submission-queue depth, fixed at setup by the kernel. It bounds how many
+// submissions may be queued before an `io_uring_enter`, not how many operations
+// may be in flight.
+enum { MoonbitCoIoSqDepth = 1024, MoonbitCoIoInitialSlots = 256 };
 
 struct moonbit_co_io {
   int ring_fd;
@@ -80,19 +81,27 @@ struct moonbit_co_io {
   // path, or the read/write buffer) so it is not freed before completion; NULL
   // when there is nothing to retain.
   //
-  // Slots are NOT the submission-queue index: the kernel frees an SQ index as
-  // soon as it consumes the SQE, long before the request completes, so using it
-  // as the slot id lets a new submission overwrite a table entry whose request
-  // is still in flight (and then the completion wakes the wrong coroutine).
-  // Slots come from `slot_free` and are recycled only by `poll`.
-  struct moonbit_co_io_completion completion[MoonbitCoIoSlots];
-  uint32_t slot_free[MoonbitCoIoSlots];
+  // Per-slot request state. Slots are NOT the submission-queue index: the
+  // kernel frees an SQ index as soon as it consumes the SQE, long before the
+  // request completes, so using it as the slot id lets a new submission
+  // overwrite a table entry whose request is still in flight (and then the
+  // completion wakes the wrong coroutine). Slots come from `slot_free` and are
+  // recycled only by `poll`.
+  //
+  // Both arrays grow on demand: each parked coroutine owns one slot, so the
+  // table size is the in-flight ceiling, and it should follow the workload
+  // rather than a compile-time constant.
+  struct moonbit_co_io_completion *completion;
+  uint32_t *slot_free;
+  uint32_t slot_capacity;
   uint32_t slot_free_len;
 };
 
 static void
 moonbit_co_io_finalize(void *ptr) {
   struct moonbit_co_io *io = (struct moonbit_co_io *)ptr;
+  free(io->completion);
+  free(io->slot_free);
   if (io->sq_ring_ptr)
     munmap(io->sq_ring_ptr, io->sq_ring_size);
   if (io->sqes)
@@ -120,17 +129,26 @@ moonbit_co_io_init(struct moonbit_co_io *io) {
   struct io_uring_params params;
   memset(&params, 0, sizeof(params));
 
-  int fd = io_uring_setup(MoonbitCoIoSlots, &params);
+  int fd = io_uring_setup(MoonbitCoIoSqDepth, &params);
   if (fd < 0) {
     return errno;
   }
 
   io->ring_fd = fd;
 
-  for (uint32_t i = 0; i < MoonbitCoIoSlots; i++) {
-    io->slot_free[i] = MoonbitCoIoSlots - 1 - i;
+  io->slot_capacity = MoonbitCoIoInitialSlots;
+  io->completion = (struct moonbit_co_io_completion *)calloc(
+    io->slot_capacity, sizeof(struct moonbit_co_io_completion)
+  );
+  io->slot_free =
+    (uint32_t *)calloc(io->slot_capacity, sizeof(uint32_t));
+  if (!io->completion || !io->slot_free) {
+    return ENOMEM;
   }
-  io->slot_free_len = MoonbitCoIoSlots;
+  for (uint32_t i = 0; i < io->slot_capacity; i++) {
+    io->slot_free[i] = io->slot_capacity - 1 - i;
+  }
+  io->slot_free_len = io->slot_capacity;
 
   // Map SQ ring
   io->sq_ring_size = params.sq_off.array + params.sq_entries * sizeof(uint32_t);
@@ -227,14 +245,24 @@ get_sqe(struct moonbit_co_io *io) {
 static uint32_t
 alloc_slot(struct moonbit_co_io *io) {
   if (io->slot_free_len == 0) {
-    // Every slot is in flight: more concurrent operations than the table can
-    // track. Raising MoonbitCoIoSlots raises the ceiling.
-    fprintf(
-      stderr,
-      "co-io: all %d io_uring request slots are in flight\n",
-      (int)MoonbitCoIoSlots
-    );
-    abort();
+    // Grow: slot ids are array indices, so doubling keeps existing ids valid.
+    uint32_t grown = io->slot_capacity * 2;
+    struct moonbit_co_io_completion *completion =
+      (struct moonbit_co_io_completion *)realloc(
+        io->completion, grown * sizeof(struct moonbit_co_io_completion)
+      );
+    uint32_t *slot_free =
+      (uint32_t *)realloc(io->slot_free, grown * sizeof(uint32_t));
+    if (!completion || !slot_free) {
+      fprintf(stderr, "co-io: out of memory growing the request table\n");
+      abort();
+    }
+    io->completion = completion;
+    io->slot_free = slot_free;
+    for (uint32_t i = io->slot_capacity; i < grown; i++) {
+      slot_free[io->slot_free_len++] = i;
+    }
+    io->slot_capacity = grown;
   }
   return io->slot_free[--io->slot_free_len];
 }
@@ -456,6 +484,28 @@ moonbit_co_io_submit_send(
   sqe->msg_flags = MSG_NOSIGNAL;
   sqe->user_data = slot;
   io->completion[slot].request = buffer;
+  io->completion[slot].result = result;
+  io->completion[slot].coroutine = coroutine;
+  moonbit_decref(io);
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_connect(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t addr,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
+  sqe->opcode = IORING_OP_CONNECT;
+  sqe->fd = (int32_t)handle;
+  sqe->addr = (uint64_t)(uintptr_t)addr;
+  sqe->off = sizeof(struct sockaddr_in); // CONNECT takes the length in `off`
+  sqe->user_data = slot;
+  io->completion[slot].request = addr;
   io->completion[slot].result = result;
   io->completion[slot].coroutine = coroutine;
   moonbit_decref(io);
