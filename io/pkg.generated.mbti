@@ -39,15 +39,43 @@ pub fn File::read(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int r
 pub fn File::write(Self, Bytes, offset? : Int, length? : Int) -> Int raise
 
 type Handle
+pub fn Handle::accept(Self) -> (Self, Bytes) raise
 pub fn Handle::close(Self) -> Unit raise
 pub fn Handle::read(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
+pub fn Handle::recv(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
+pub fn Handle::send(Self, Bytes, offset? : Int, length? : Int) -> Int raise
 pub fn Handle::write(Self, Bytes, offset? : Int, length? : Int) -> Int raise
+
+pub(all) struct SocketAddr {
+  ip : UInt
+  port : Int
+}
+pub fn SocketAddr::SocketAddr(UInt, Int) -> Self
+pub fn SocketAddr::loopback(Int) -> Self
+pub fn SocketAddr::to_string(Self) -> String
 
 pub(all) enum SyncMode {
   None
   Data
   Full
 }
+
+pub struct TcpListener {
+  fd : Int
+  ip : UInt
+}
+pub fn TcpListener::accept(Self) -> (TcpStream, SocketAddr) raise
+pub fn TcpListener::bind(SocketAddr, backlog? : Int) -> Self raise Errno
+pub fn TcpListener::close(Self) -> Unit
+pub fn TcpListener::local_addr(Self) -> SocketAddr raise Errno
+
+pub struct TcpStream {
+  handle : Handle
+}
+pub fn TcpStream::close(Self) -> Unit raise
+pub fn TcpStream::connect(SocketAddr) -> Self raise Errno
+pub fn TcpStream::read(Self, FixedArray[Byte]) -> Int raise
+pub fn TcpStream::write(Self, Bytes) -> Int raise
 
 // Type aliases
 

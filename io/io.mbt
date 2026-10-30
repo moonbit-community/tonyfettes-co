@@ -303,3 +303,102 @@ pub fn Handle::close(handle : Handle) -> Unit raise {
   @coroutine.suspend()
   result.value() |> ignore()
 }
+
+///|
+#owned(io, peer, result, coroutine)
+extern "c" fn submit_accept(
+  io : IoContext,
+  handle : Handle,
+  peer~ : Bytes,
+  result : IoResult,
+  coroutine : @coroutine.Coroutine,
+) = "moonbit_co_io_submit_accept"
+
+///|
+#owned(io, buffer, result, coroutine)
+extern "c" fn submit_recv(
+  io : IoContext,
+  handle : Handle,
+  buffer~ : FixedArray[Byte],
+  offset~ : Int32,
+  length~ : Int32,
+  result : IoResult,
+  coroutine : @coroutine.Coroutine,
+) = "moonbit_co_io_submit_recv"
+
+///|
+#owned(io, buffer, result, coroutine)
+extern "c" fn submit_send(
+  io : IoContext,
+  handle : Handle,
+  buffer~ : Bytes,
+  offset~ : Int32,
+  length~ : Int32,
+  result : IoResult,
+  coroutine : @coroutine.Coroutine,
+) = "moonbit_co_io_submit_send"
+
+///|
+/// Accept a connection on a listening socket.
+///
+/// Returns the new connection and the raw peer `sockaddr` (132 bytes: 128 of
+/// address followed by a `uint32` length) for `SocketAddr` to decode.
+pub fn Handle::accept(self : Handle) -> (Handle, Bytes) raise {
+  let result = IoResult::new()
+  let peer = Bytes::new(132)
+  submit_accept(io, self, peer~, result, @coroutine.current())
+  @coroutine.suspend()
+  (Handle(result.value().to_int()), peer)
+}
+
+///|
+/// Receive from a socket. Returns 0 at end of stream, like `read(2)`, but
+/// without touching a file offset.
+pub fn Handle::recv(
+  handle : Handle,
+  buffer : FixedArray[Byte],
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise {
+  guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
+    raise Errno(EINVAL)
+  }
+  let result = IoResult::new()
+  submit_recv(
+    io,
+    handle,
+    buffer~,
+    offset~,
+    length~,
+    result,
+    @coroutine.current(),
+  )
+  @coroutine.suspend()
+  result.value().to_int()
+}
+
+///|
+/// Send to a socket with `MSG_NOSIGNAL`, so a peer that has gone away yields
+/// `EPIPE` instead of killing the process with `SIGPIPE`.
+pub fn Handle::send(
+  handle : Handle,
+  buffer : Bytes,
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise {
+  guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
+    raise Errno(EINVAL)
+  }
+  let result = IoResult::new()
+  submit_send(
+    io,
+    handle,
+    buffer~,
+    offset~,
+    length~,
+    result,
+    @coroutine.current(),
+  )
+  @coroutine.suspend()
+  result.value().to_int()
+}

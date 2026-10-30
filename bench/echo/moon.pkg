@@ -1,0 +1,10 @@
+import {
+  "tonyfettes/co/coroutine",
+  "tonyfettes/co-io" @io,
+}
+
+pkgtype(kind: "executable")
+
+options(
+  overrides: [ "tonyfettes/co-io/runtime" ],
+)

@@ -99,6 +99,47 @@ moonbit_co_io_submit_close(
   struct moonbit_co_coroutine *coroutine
 );
 
+// Accept a connection on a listening socket. `peer` is an owned 132-byte buffer:
+// [0..128) receives the peer `sockaddr`, [128..132) is the sockaddr length, both
+// written by the kernel before completion.
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_accept(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t peer,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+);
+
+// Receive from a socket: like read(), but records a zero-length result as EOF
+// rather than moving a file offset.
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_recv(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
+  int32_t offset,
+  int32_t length,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+);
+
+// Send to a socket with MSG_NOSIGNAL, so a peer that closed its end yields EPIPE
+// instead of killing the process with SIGPIPE.
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_send(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
+  int32_t offset,
+  int32_t length,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+);
+
 MOONBIT_FFI_EXPORT
 int32_t
 moonbit_co_io_poll(

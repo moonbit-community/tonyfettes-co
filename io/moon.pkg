@@ -11,6 +11,6 @@ import {
 } for "test"
 
 options(
-  "native-stub": [ "io.c" ],
+  "native-stub": [ "io.c", "net.c" ],
   overrides: [ "tonyfettes/co-io/runtime" ],
 )

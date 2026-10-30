@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <stdatomic.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -218,6 +219,80 @@ moonbit_co_io_submit_close(
       result->error = 0;
     }
     moonbit_co_io_schedule(io, NULL, result, coroutine);
+  });
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_accept(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t peer,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  // The blocking `accept` runs on a pool thread; `peer` is retained until the
+  // completion is drained, same as the io_uring backend.
+  dispatch_async(io->queue, ^{
+    socklen_t len = 128;
+    int fd = accept((int)handle, (struct sockaddr *)peer, &len);
+    if (fd < 0) {
+      result->value = 0;
+      result->error = errno;
+    } else {
+      *(uint32_t *)(peer + 128) = (uint32_t)len;
+      result->value = (uint64_t)fd;
+      result->error = 0;
+    }
+    moonbit_co_io_schedule(io, peer, result, coroutine);
+  });
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_recv(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
+  int32_t offset,
+  int32_t length,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  dispatch_async(io->queue, ^{
+    ssize_t n = recv((int)handle, buffer + offset, length, 0);
+    if (n < 0) {
+      result->value = 0;
+      result->error = errno;
+    } else {
+      result->value = (uint64_t)n;
+      result->error = 0;
+    }
+    moonbit_co_io_schedule(io, buffer, result, coroutine);
+  });
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_send(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
+  int32_t offset,
+  int32_t length,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  dispatch_async(io->queue, ^{
+    ssize_t n = send((int)handle, buffer + offset, length, MSG_NOSIGNAL);
+    if (n < 0) {
+      result->value = 0;
+      result->error = errno;
+    } else {
+      result->value = (uint64_t)n;
+      result->error = 0;
+    }
+    moonbit_co_io_schedule(io, buffer, result, coroutine);
   });
 }
 

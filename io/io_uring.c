@@ -3,11 +3,13 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <linux/io_uring.h>
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/socket.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -42,6 +44,11 @@ struct moonbit_co_io_completion {
   struct moonbit_co_io_result *result;
 };
 
+// Concurrent in-flight operations this backend can track. Each parked coroutine
+// owns one slot (a pending accept/read/write), so this is also the connection
+// ceiling for the io_uring path.
+enum { MoonbitCoIoSlots = 4096 };
+
 struct moonbit_co_io {
   int ring_fd;
 
@@ -72,7 +79,15 @@ struct moonbit_co_io {
   // MoonBit object the kernel still accesses after submit returns (the open
   // path, or the read/write buffer) so it is not freed before completion; NULL
   // when there is nothing to retain.
-  struct moonbit_co_io_completion completion[256];
+  //
+  // Slots are NOT the submission-queue index: the kernel frees an SQ index as
+  // soon as it consumes the SQE, long before the request completes, so using it
+  // as the slot id lets a new submission overwrite a table entry whose request
+  // is still in flight (and then the completion wakes the wrong coroutine).
+  // Slots come from `slot_free` and are recycled only by `poll`.
+  struct moonbit_co_io_completion completion[MoonbitCoIoSlots];
+  uint32_t slot_free[MoonbitCoIoSlots];
+  uint32_t slot_free_len;
 };
 
 static void
@@ -105,12 +120,17 @@ moonbit_co_io_init(struct moonbit_co_io *io) {
   struct io_uring_params params;
   memset(&params, 0, sizeof(params));
 
-  int fd = io_uring_setup(256, &params);
+  int fd = io_uring_setup(MoonbitCoIoSlots, &params);
   if (fd < 0) {
     return errno;
   }
 
   io->ring_fd = fd;
+
+  for (uint32_t i = 0; i < MoonbitCoIoSlots; i++) {
+    io->slot_free[i] = MoonbitCoIoSlots - 1 - i;
+  }
+  io->slot_free_len = MoonbitCoIoSlots;
 
   // Map SQ ring
   io->sq_ring_size = params.sq_off.array + params.sq_entries * sizeof(uint32_t);
@@ -172,7 +192,7 @@ moonbit_co_io_init(struct moonbit_co_io *io) {
 // -- submission helpers --
 
 static struct io_uring_sqe *
-get_sqe(struct moonbit_co_io *io, uint32_t *out_slot) {
+get_sqe(struct moonbit_co_io *io) {
   uint32_t tail = *io->sq_tail;
   uint32_t head =
     atomic_load_explicit((_Atomic uint32_t *)io->sq_head, memory_order_acquire);
@@ -199,8 +219,24 @@ get_sqe(struct moonbit_co_io *io, uint32_t *out_slot) {
   atomic_thread_fence(memory_order_release);
   io->sq_pending++;
 
-  *out_slot = index;
   return sqe;
+}
+
+// Slots are recycled by `poll` only, so a slot owned by an in-flight request is
+// never handed out again.
+static uint32_t
+alloc_slot(struct moonbit_co_io *io) {
+  if (io->slot_free_len == 0) {
+    // Every slot is in flight: more concurrent operations than the table can
+    // track. Raising MoonbitCoIoSlots raises the ceiling.
+    fprintf(
+      stderr,
+      "co-io: all %d io_uring request slots are in flight\n",
+      (int)MoonbitCoIoSlots
+    );
+    abort();
+  }
+  return io->slot_free[--io->slot_free_len];
 }
 
 // -- public API --
@@ -267,8 +303,8 @@ moonbit_co_io_submit_open(
     flags |= O_DIRECTORY;
   }
   int mode = (flags & O_CREAT) ? 0666 : 0;
-  uint32_t slot;
-  struct io_uring_sqe *sqe = get_sqe(io, &slot);
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
   sqe->opcode = IORING_OP_OPENAT;
   sqe->fd = at;
   sqe->addr = (uint64_t)(uintptr_t)path;
@@ -292,8 +328,8 @@ moonbit_co_io_submit_read(
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
-  uint32_t slot;
-  struct io_uring_sqe *sqe = get_sqe(io, &slot);
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
   sqe->opcode = IORING_OP_READ;
   sqe->fd = (int32_t)handle;
   sqe->addr = (uint64_t)(uintptr_t)((uint8_t *)buffer + offset);
@@ -317,8 +353,8 @@ moonbit_co_io_submit_write(
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
-  uint32_t slot;
-  struct io_uring_sqe *sqe = get_sqe(io, &slot);
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
   sqe->opcode = IORING_OP_WRITE;
   sqe->fd = (int32_t)handle;
   sqe->addr = (uint64_t)(uintptr_t)((const uint8_t *)buffer + offset);
@@ -339,12 +375,87 @@ moonbit_co_io_submit_close(
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
-  uint32_t slot;
-  struct io_uring_sqe *sqe = get_sqe(io, &slot);
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
   sqe->opcode = IORING_OP_CLOSE;
   sqe->fd = (int32_t)handle;
   sqe->user_data = slot;
   io->completion[slot].request = NULL; // close has no payload to keep alive
+  io->completion[slot].result = result;
+  io->completion[slot].coroutine = coroutine;
+  moonbit_decref(io);
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_accept(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t peer,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
+  // The kernel writes the peer address into `peer` before the CQE arrives, so
+  // the buffer must stay alive until completion: it is retained as `request`.
+  *(uint32_t *)(peer + 128) = 128;
+  sqe->opcode = IORING_OP_ACCEPT;
+  sqe->fd = (int32_t)handle;
+  sqe->addr = (uint64_t)(uintptr_t)peer;
+  sqe->addr2 = (uint64_t)(uintptr_t)(peer + 128);
+  sqe->accept_flags = 0;
+  sqe->user_data = slot;
+  io->completion[slot].request = peer;
+  io->completion[slot].result = result;
+  io->completion[slot].coroutine = coroutine;
+  moonbit_decref(io);
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_recv(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
+  int32_t offset,
+  int32_t length,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
+  sqe->opcode = IORING_OP_RECV;
+  sqe->fd = (int32_t)handle;
+  sqe->addr = (uint64_t)(uintptr_t)((uint8_t *)buffer + offset);
+  sqe->len = (uint32_t)length;
+  sqe->user_data = slot;
+  io->completion[slot].request = buffer;
+  io->completion[slot].result = result;
+  io->completion[slot].coroutine = coroutine;
+  moonbit_decref(io);
+}
+
+MOONBIT_FFI_EXPORT
+void
+moonbit_co_io_submit_send(
+  struct moonbit_co_io *io,
+  moonbit_co_io_handle_t handle,
+  moonbit_bytes_t buffer,
+  int32_t offset,
+  int32_t length,
+  struct moonbit_co_io_result *result,
+  struct moonbit_co_coroutine *coroutine
+) {
+  uint32_t slot = alloc_slot(io);
+  struct io_uring_sqe *sqe = get_sqe(io);
+  sqe->opcode = IORING_OP_SEND;
+  sqe->fd = (int32_t)handle;
+  sqe->addr = (uint64_t)(uintptr_t)((const uint8_t *)buffer + offset);
+  sqe->len = (uint32_t)length;
+  sqe->msg_flags = MSG_NOSIGNAL;
+  sqe->user_data = slot;
+  io->completion[slot].request = buffer;
   io->completion[slot].result = result;
   io->completion[slot].coroutine = coroutine;
   moonbit_decref(io);
@@ -393,6 +504,10 @@ moonbit_co_io_poll(
     moonbit_decref(io->completion[slot].result);
     coroutines[count] = io->completion[slot].coroutine;
     moonbit_decref(io->completion[slot].coroutine);
+    io->completion[slot].request = NULL;
+    io->completion[slot].result = NULL;
+    io->completion[slot].coroutine = NULL;
+    io->slot_free[io->slot_free_len++] = slot;
 
     count++;
     head++;

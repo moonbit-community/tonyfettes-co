@@ -8,5 +8,6 @@ preferred_target = "native"
 
 import {
   "tonyfettes/co@0.1.0",
+  "tonyfettes/co-io@0.1.0",
   "moonbitlang/async@0.20.1",
 }
