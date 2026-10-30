@@ -2,15 +2,20 @@
 package "tonyfettes/co/channel"
 
 import {
+  "moonbitlang/core/debug",
   "tonyfettes/co/select",
 }
 
 // Values
 
 // Errors
+pub(all) suberror ChannelClosed {
+  ChannelClosed
+} derive(@debug.Debug)
 
 // Types and methods
 type Channel[T]
+pub fn[T] Channel::close(Self[T]) -> Unit
 pub fn[T] Channel::new() -> Self[T]
 pub fn[T] Channel::recv(Self[T]) -> T raise
 pub fn[T, R] Channel::recv_map_to(Self[T], @select.Selector[R], (T) -> R raise) -> Unit raise

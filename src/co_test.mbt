@@ -241,3 +241,75 @@ test "Future: blocks until ready" {
   println("main: chan.send(5)")
   assert_eq(f.wait(), 10)
 }
+
+///|
+test "Channel close: a parked receiver is woken and its defer runs" {
+  let gate : @channel.Channel[Unit] = @channel.Channel::new()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(name="receiver", () => {
+      defer log.push("cleanup")
+      gate.recv() catch {
+        @channel.ChannelClosed => log.push("closed")
+        _ => log.push("other-error")
+      }
+      log.push("returned")
+    }),
+  )
+  assert_eq(log, [])
+  gate.close()
+  ignore(@coroutine.Coroutine(name="drain", () => ()))
+  assert_eq(log, ["closed", "returned", "cleanup"])
+}
+
+///|
+test "Channel close: every parked receiver is woken" {
+  let gate : @channel.Channel[Unit] = @channel.Channel::new()
+  let log : Array[String] = []
+  for i in 0..<3 {
+    ignore(
+      @coroutine.Coroutine(name="receiver-\{i}", () => {
+        gate.recv() catch {
+          @channel.ChannelClosed => log.push("closed-\{i}")
+          _ => log.push("other-error-\{i}")
+        }
+      }),
+    )
+  }
+  assert_eq(log, [])
+  gate.close()
+  ignore(@coroutine.Coroutine(name="drain", () => ()))
+  assert_eq(log, ["closed-0", "closed-1", "closed-2"])
+}
+
+///|
+test "Channel close: buffered values drain before the close is observed" {
+  let gate : @channel.Channel[Int32] = @channel.Channel::new()
+  gate.send(1)
+  gate.send(2)
+  gate.close()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(name="receiver", () => {
+      let first = gate.recv()
+      let second = gate.recv()
+      log.push("\{first},\{second}")
+      let third = gate.recv() catch {
+        @channel.ChannelClosed => -1
+        _ => -2
+      }
+      log.push("third=\{third}")
+    }),
+  )
+  ignore(@coroutine.Coroutine(name="drain", () => ()))
+  assert_eq(log, ["1,2", "third=-1"])
+}
+
+///|
+test "Channel close: idempotent, and recv on a drained closed channel raises" {
+  let gate : @channel.Channel[Int32] = @channel.Channel::new()
+  gate.close()
+  gate.close() // idempotent: teardown paths may close more than once
+  let error = @test.expect_error(() => gate.recv())
+  assert_true(error is @channel.ChannelClosed)
+}
