@@ -3,6 +3,7 @@ import {
   "tonyfettes/co/coroutine",
   "tonyfettes/co/channel",
   "tonyfettes/co/future",
+  "tonyfettes/co/select",
 } for "test"
 
 options(

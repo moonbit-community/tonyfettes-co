@@ -313,3 +313,65 @@ test "Channel close: idempotent, and recv on a drained closed channel raises" {
   let error = @test.expect_error(() => gate.recv())
   assert_true(error is @channel.ChannelClosed)
 }
+
+///|
+test "Channel close: wakes a select case waiting on the channel" {
+  let gate : @channel.Channel[Int32] = @channel.Channel::new()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(name="selector", () => {
+      defer log.push("cleanup")
+      let value = @select.select(s => gate.recv_map_to(s, value => value * 2))
+      log.push("value=\{value}")
+    }),
+  )
+  gate.close()
+  // Dropping this spawn lets the selector unwind; its `ChannelClosed` is handed
+  // to the creator, so the spawn itself raises it.
+  let error = @test.expect_error(() => {
+    ignore(@coroutine.Coroutine(name="drain", () => ()))
+  })
+  assert_true(error is @channel.ChannelClosed)
+  assert_eq(log, ["cleanup"])
+}
+
+///|
+test "Channel close: an unmapped select case observes the close too" {
+  let gate : @channel.Channel[Int32] = @channel.Channel::new()
+  let other : @channel.Channel[Int32] = @channel.Channel::new()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(name="selector", () => {
+      defer log.push("cleanup")
+      let value = @select.select(s => {
+        other.recv_map_to(s, value => value * 10)
+        gate.recv_to(s)
+      })
+      log.push("value=\{value}")
+    }),
+  )
+  gate.close()
+  let error = @test.expect_error(() => {
+    ignore(@coroutine.Coroutine(name="drain", () => ()))
+  })
+  assert_true(error is @channel.ChannelClosed)
+  assert_eq(log, ["cleanup"])
+}
+
+///|
+test "Channel close: a value delivered before the close still wins" {
+  let gate : @channel.Channel[Int32] = @channel.Channel::new()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(name="selector", () => {
+      let value = @select.select(s => gate.recv_map_to(s, value => value * 2))
+      log.push("value=\{value}")
+    }),
+  )
+  // The send claims the case and schedules the selector; the close then finds
+  // the case already claimed and must not override the delivered value.
+  gate.send(21)
+  gate.close()
+  ignore(@coroutine.Coroutine(name="drain", () => ()))
+  assert_eq(log, ["value=42"])
+}

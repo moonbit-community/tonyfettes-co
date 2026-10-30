@@ -22,8 +22,8 @@ pub fn[T] Future::set(self : Future[T], value : T) -> Unit {
   for waiter in self.waiters {
     match waiter {
       Wait(coroutine) => coroutine.schedule()
-      WaitTo({ completed: false, coroutine, .. } as selector) => {
-        selector.completed = true
+      WaitTo({ state: Pending, coroutine, .. } as selector) => {
+        selector.state = Completed
         selector.value = Some(value)
         if coroutine is Some(coroutine) {
           coroutine.schedule()
@@ -54,9 +54,9 @@ pub fn[T] Future::wait_to(
   self : Future[T],
   selector : @select.Selector[T],
 ) -> Unit {
-  guard !selector.completed else { return }
+  guard selector.state is Pending else { return }
   if self.value is Some(value) {
-    selector.completed = true
+    selector.state = Completed
     selector.value = Some(value)
     return
   }
@@ -69,16 +69,16 @@ pub fn[T, R] Future::wait_map_to(
   selector : @select.Selector[R],
   f : (T) -> R raise,
 ) -> Unit raise {
-  guard !selector.completed else { return }
+  guard selector.state is Pending else { return }
   if self.value is Some(value) {
-    selector.completed = true
+    selector.state = Completed
     selector.value = Some(f(value))
     return
   }
   self.waiters.push(
     WaitMapTo(value => {
-      guard !selector.completed else { return }
-      selector.completed = true
+      guard selector.state is Pending else { return }
+      selector.state = Completed
       if selector.coroutine is Some(coroutine) {
         coroutine.schedule()
       }

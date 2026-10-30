@@ -13,12 +13,19 @@ pub fn[R] select((Selector[R]) -> Unit raise) -> R raise
 // Types and methods
 pub(all) struct Selector[T] {
   mut coroutine : @coroutine.Coroutine?
-  mut completed : Bool
+  mut state : SelectorState
   mut value : T?
   mut thunk : (() -> T raise)?
+  mut closed_error : Error?
 }
 pub fn[T] Selector::Selector() -> Self[T]
 pub fn[T] Selector::wait(Self[T]) -> T raise
+
+pub(all) enum SelectorState {
+  Pending
+  Completed
+  Closed
+}
 
 // Type aliases
 

@@ -27,7 +27,7 @@ pub extend ChannelClosed with @debug.Debug::{to_repr}
 priv enum Reader[T] {
   Recv(@coroutine.Coroutine, mut value~ : T?)
   RecvTo(@select.Selector[T])
-  RecvMapTo((T) -> Bool)
+  RecvMapTo((T?) -> Bool)
 }
 
 ///|
@@ -51,15 +51,15 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
         coroutine.schedule()
         break
       }
-      RecvTo({ completed: false, coroutine, .. } as selected) => {
-        selected.completed = true
+      RecvTo({ state: Pending, coroutine, .. } as selected) => {
+        selected.state = Completed
+        selected.value = Some(value)
         if coroutine is Some(coroutine) {
           coroutine.schedule()
         }
-        selected.value = Some(value)
         break
       }
-      RecvMapTo(func) if func(value) => break
+      RecvMapTo(func) if func(Some(value)) => break
       _ => continue
     }
   } nobreak {
@@ -85,9 +85,17 @@ pub fn[T] Channel::close(self : Channel[T]) -> Unit {
   while self.readers.pop_front() is Some(reader) {
     match reader {
       Recv(coroutine, value=_) => coroutine.schedule()
-      // TODO: `select` cases (`RecvTo`/`RecvMapTo`) are not signalled yet. The
-      // mapped ones hide the selector behind a closure, so `Selector` needs its
-      // own "closed" state before they can be woken here.
+      RecvTo({ state: Pending, coroutine, .. } as selected) => {
+        selected.state = Closed
+        selected.closed_error = Some(ChannelClosed)
+        if coroutine is Some(coroutine) {
+          coroutine.schedule()
+        }
+      }
+      // The mapped case's closure owns the selector; `None` tells it "closed".
+      // A case that lost the race (already `Completed`) ignores it, so a value
+      // that was delivered first still wins.
+      RecvMapTo(func) => func(None) |> ignore()
       _ => continue
     }
   }
@@ -98,10 +106,15 @@ pub fn[T] Channel::recv_to(
   self : Channel[T],
   selected : @select.Selector[T],
 ) -> Unit {
-  guard !selected.completed else { return }
+  guard selected.state is Pending else { return }
   if self.values.pop_front() is Some(value) {
-    selected.completed = true
+    selected.state = Completed
     selected.value = Some(value)
+    return
+  }
+  if self.closed {
+    selected.state = Closed
+    selected.closed_error = Some(ChannelClosed)
     return
   }
   self.readers.push_back(RecvTo(selected))
@@ -113,21 +126,39 @@ pub fn[T, R] Channel::recv_map_to(
   selected : @select.Selector[R],
   f : (T) -> R raise,
 ) -> Unit raise {
-  guard !selected.completed else { return }
+  guard selected.state is Pending else { return }
   if self.values.pop_front() is Some(value) {
-    selected.completed = true
+    selected.state = Completed
     selected.value = Some(f(value))
     return
   }
+  if self.closed {
+    selected.state = Closed
+    return
+  }
+  // `None` means "this channel closed": the same closure serves both events, so
+  // a mapped case costs exactly one allocation, like an unmapped one.
   self.readers.push_back(
-    RecvMapTo(value => {
-      guard !selected.completed else { false }
-      selected.completed = true
-      if selected.coroutine is Some(coroutine) {
-        coroutine.schedule()
+    RecvMapTo(event => {
+      guard selected.state is Pending else { false }
+      match event {
+        None => {
+          selected.state = Closed
+          selected.closed_error = Some(ChannelClosed)
+          if selected.coroutine is Some(coroutine) {
+            coroutine.schedule()
+          }
+          true
+        }
+        Some(value) => {
+          selected.state = Completed
+          if selected.coroutine is Some(coroutine) {
+            coroutine.schedule()
+          }
+          selected.thunk = Some(() => f(value))
+          true
+        }
       }
-      selected.thunk = Some(() => f(value))
-      true
     }),
   )
 }
