@@ -2,10 +2,6 @@ name = "tonyfettes/co"
 
 version = "0.1.0"
 
-import {
-  "tonyfettes/c@0.7.4",
-}
-
 readme = "README.md"
 
 repository = ""
