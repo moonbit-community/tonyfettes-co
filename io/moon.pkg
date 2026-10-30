@@ -1,13 +1,13 @@
 import {
   "tonyfettes/co/coroutine",
   "tonyfettes/co-io/os_string",
+  "moonbitlang/core/debug",
 }
 
 import {
   "tonyfettes/co-io" @io,
   "tonyfettes/co/future",
   "moonbitlang/core/test",
-  "moonbitlang/core/debug",
 } for "test"
 
 options(

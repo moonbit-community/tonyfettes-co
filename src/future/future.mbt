@@ -13,7 +13,7 @@ priv enum Waiter[T] {
 
 ///|
 pub fn[T] Future::new() -> Future[T] {
-  Future::{ value: None, waiters: Array::new() }
+  Future::{ value: None, waiters: Array() }
 }
 
 ///|

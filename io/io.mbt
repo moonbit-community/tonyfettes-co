@@ -62,6 +62,15 @@ pub(all) suberror Errno {
 } derive(Debug)
 
 ///|
+// `derive(Debug)` promotes `Debug::to_repr` to a regular method of `Errno`;
+// declare that promotion explicitly instead of relying on the deprecated
+// implicit form. Hidden from the interface — `Debug::to_repr` is the
+// supported call form for formatting an error.
+#deprecated("Use `Debug::to_repr` instead", skip_current_package=true)
+#doc(hidden)
+pub extend Errno with @debug.Debug::{to_repr}
+
+///|
 #owned(context, path, result, coroutine)
 extern "c" fn submit_open(
   context : IoContext,

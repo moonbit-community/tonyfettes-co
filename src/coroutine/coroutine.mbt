@@ -175,12 +175,13 @@ pub fn Coroutine::current() -> Coroutine {
 pub fn Coroutine::suspend() -> Unit raise {
   let prev = scheduler.current
   prev.state = Suspended
-  let next = scheduler.next() catch {
-    error => {
-      prev.state = Running
-      raise error
-    }
+  // If picking the next coroutine fails, we never actually suspended, so we are
+  // still running: restore our own state on the way out. Only reached on the
+  // suspending side (still on `prev`'s stack).
+  errdefer {
+    prev.state = Running
   }
+  let next = scheduler.next()
   next.state = Running
   co_shift(prev.context, next.context)
   // We just woke up. Drop the +1 reference the resume handed us (see co_shift).

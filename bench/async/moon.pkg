@@ -1,5 +1,5 @@
 import {
-  "moonbitlang/async",
+  "moonbitlang/async" @mb_async,
   "moonbitlang/async/aqueue",
   "moonbitlang/core/bench",
   "moonbitlang/core/env",
