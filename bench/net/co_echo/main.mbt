@@ -1,5 +1,5 @@
 ///|
-/// Minimal TCP echo server: one coroutine per connection.
+/// Minimal TCP echo server on `co`: one coroutine per connection.
 ///
 ///   moon run --release --target native ./echo
 ///   telnet 127.0.0.1 8080      # type, get it echoed back
@@ -13,7 +13,7 @@ fn main raise {
     let id = served
     ignore(
       @coroutine.Coroutine(name="conn-\{id}", () => {
-        let buffer = FixedArray::make(4096, b'\x00')
+        let buffer = FixedArray::make(16384, b'\x00')
         for ;; {
           let n = stream.read(buffer) catch {
             err => {

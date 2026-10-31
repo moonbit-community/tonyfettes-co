@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "tonyfettes/co-bench/echo"
+package "tonyfettes/co-bench/net/co_echo"
 
 // Values
 

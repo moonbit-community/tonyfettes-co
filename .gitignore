@@ -9,3 +9,6 @@ target
 
 # clangd
 compile_flags.txt
+
+# built load generator
+bench/net/loadgen/echo_bench
