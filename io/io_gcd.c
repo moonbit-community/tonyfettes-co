@@ -163,11 +163,14 @@ moonbit_co_io_submit_read(
   moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
+  int64_t position,
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
   dispatch_async(io->queue, ^{
-    ssize_t n = read(handle, buffer + offset, length);
+    ssize_t n = position < 0 ? read(handle, buffer + offset, length)
+                             : pread(handle, buffer + offset, length,
+                                     (off_t)position);
     if (n < 0) {
       result->value = 0;
       result->error = errno;
@@ -187,11 +190,14 @@ moonbit_co_io_submit_write(
   moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
+  int64_t position,
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
   dispatch_async(io->queue, ^{
-    ssize_t n = write(handle, buffer + offset, length);
+    ssize_t n = position < 0 ? write(handle, buffer + offset, length)
+                             : pwrite(handle, buffer + offset, length,
+                                      (off_t)position);
     if (n < 0) {
       result->value = 0;
       result->error = errno;

@@ -1,0 +1,15 @@
+import {
+  "tonyfettes/co/channel",
+  "tonyfettes/co/coroutine",
+  "tonyfettes/co-io" @io,
+  "tonyfettes/co-io/os_string",
+  "moonbitlang/core/env",
+  "moonbitlang/core/string",
+}
+
+pkgtype(kind: "executable")
+
+options(
+  "native-stub": [ "timer.c" ],
+  overrides: [ "tonyfettes/co-io/runtime" ],
+)

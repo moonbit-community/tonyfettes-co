@@ -35,17 +35,17 @@ type File
 pub fn File::close(Self) -> Unit raise
 pub fn File::handle(Self) -> Handle
 pub fn File::open(@os_string.OsString, access? : AccessMode, create? : CreateMode, append? : Bool, sync? : SyncMode, at? : Directory) -> Self raise
-pub fn File::read(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
-pub fn File::write(Self, Bytes, offset? : Int, length? : Int) -> Int raise
+pub fn File::read(Self, FixedArray[Byte], offset? : Int, length? : Int, position? : Int64) -> Int raise
+pub fn File::write(Self, Bytes, offset? : Int, length? : Int, position? : Int64) -> Int raise
 
 type Handle
 pub fn Handle::accept(Self) -> (Self, Bytes) raise
 pub fn Handle::close(Self) -> Unit raise
 pub fn Handle::connect(Self, Bytes) -> Unit raise
-pub fn Handle::read(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
+pub fn Handle::read(Self, FixedArray[Byte], offset? : Int, length? : Int, position? : Int64) -> Int raise
 pub fn Handle::recv(Self, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise
 pub fn Handle::send(Self, Bytes, offset? : Int, length? : Int) -> Int raise
-pub fn Handle::write(Self, Bytes, offset? : Int, length? : Int) -> Int raise
+pub fn Handle::write(Self, Bytes, offset? : Int, length? : Int, position? : Int64) -> Int raise
 
 pub(all) struct SocketAddr {
   ip : UInt

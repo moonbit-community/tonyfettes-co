@@ -93,6 +93,7 @@ extern "c" fn submit_read(
   buffer~ : FixedArray[Byte],
   offset~ : Int32,
   length~ : Int32,
+  position~ : Int64,
   result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_read"
@@ -105,6 +106,7 @@ extern "c" fn submit_write(
   buffer~ : Bytes,
   offset~ : Int32,
   length~ : Int32,
+  position~ : Int64,
   result : IoResult,
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_write"
@@ -229,23 +231,34 @@ pub fn File::open(
 }
 
 ///|
+/// Reads into `buffer[offset..offset+length]` from the current file position
+/// (`position` defaults to `-1`), suspending the calling coroutine until the
+/// read completes. Returns the number of bytes read, `0` at end of file.
+///
+/// `offset` addresses the *buffer*; pass `position` to read at a fixed file
+/// offset (`pread` semantics), which is the only form that is safe to issue
+/// concurrently on one handle.
 pub fn File::read(
   self : File,
   buffer : FixedArray[Byte],
   offset~ : Int32 = 0,
   length~ : Int32 = buffer.length() - offset,
+  position~ : Int64 = -1,
 ) -> Int32 raise {
-  self.0.read(buffer, offset~, length~)
+  self.0.read(buffer, offset~, length~, position~)
 }
 
 ///|
+/// Writes `buffer[offset..offset+length]` at the current file position
+/// (`position` defaults to `-1`).
 pub fn File::write(
   self : File,
   buffer : Bytes,
   offset~ : Int32 = 0,
   length~ : Int32 = buffer.length() - offset,
+  position~ : Int64 = -1,
 ) -> Int32 raise {
-  self.0.write(buffer, offset~, length~)
+  self.0.write(buffer, offset~, length~, position~)
 }
 
 ///|
@@ -254,8 +267,12 @@ pub fn Handle::read(
   buffer : FixedArray[Byte],
   offset~ : Int32 = 0,
   length~ : Int32 = buffer.length() - offset,
+  position~ : Int64 = -1,
 ) -> Int32 raise {
-  guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
+  guard offset >= 0 &&
+    length >= 0 &&
+    offset + length <= buffer.length() &&
+    position >= -1 else {
     raise Errno(EINVAL)
   }
   let result = IoResult::new()
@@ -265,6 +282,7 @@ pub fn Handle::read(
     buffer~,
     offset~,
     length~,
+    position~,
     result,
     @coroutine.current(),
   )
@@ -278,8 +296,12 @@ pub fn Handle::write(
   buffer : Bytes,
   offset~ : Int32 = 0,
   length~ : Int32 = buffer.length() - offset,
+  position~ : Int64 = -1,
 ) -> Int32 raise {
-  guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
+  guard offset >= 0 &&
+    length >= 0 &&
+    offset + length <= buffer.length() &&
+    position >= -1 else {
     raise Errno(EINVAL)
   }
   let result = IoResult::new()
@@ -289,6 +311,7 @@ pub fn Handle::write(
     buffer~,
     offset~,
     length~,
+    position~,
     result,
     @coroutine.current(),
   )

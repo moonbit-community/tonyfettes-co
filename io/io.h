@@ -74,6 +74,7 @@ moonbit_co_io_submit_read(
   moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
+  int64_t position,
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 );
@@ -86,6 +87,7 @@ moonbit_co_io_submit_write(
   moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
+  int64_t position,
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 );

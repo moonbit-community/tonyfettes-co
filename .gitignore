@@ -12,3 +12,6 @@ compile_flags.txt
 
 # built load generator
 bench/net/loadgen/echo_bench
+
+# built filesystem baseline harness
+bench/fs/c/baseline

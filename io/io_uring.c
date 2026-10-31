@@ -353,6 +353,7 @@ moonbit_co_io_submit_read(
   moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
+  int64_t position,
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
@@ -362,7 +363,7 @@ moonbit_co_io_submit_read(
   sqe->fd = (int32_t)handle;
   sqe->addr = (uint64_t)(uintptr_t)((uint8_t *)buffer + offset);
   sqe->len = (uint32_t)length;
-  sqe->off = (uint64_t)-1; // use current file offset
+  sqe->off = (uint64_t)position; // -1 keeps the kernel's current file offset
   sqe->user_data = slot;
   io->completion[slot].request = buffer;
   io->completion[slot].result = result;
@@ -378,6 +379,7 @@ moonbit_co_io_submit_write(
   moonbit_bytes_t buffer,
   int32_t offset,
   int32_t length,
+  int64_t position,
   struct moonbit_co_io_result *result,
   struct moonbit_co_coroutine *coroutine
 ) {
@@ -387,7 +389,7 @@ moonbit_co_io_submit_write(
   sqe->fd = (int32_t)handle;
   sqe->addr = (uint64_t)(uintptr_t)((const uint8_t *)buffer + offset);
   sqe->len = (uint32_t)length;
-  sqe->off = (uint64_t)-1; // use current file offset
+  sqe->off = (uint64_t)position; // -1 keeps the kernel's current file offset
   sqe->user_data = slot;
   io->completion[slot].request = buffer;
   io->completion[slot].result = result;

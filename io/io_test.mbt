@@ -118,3 +118,68 @@ test "open non-existent file" {
   )
   assert_true(@test.expect_error(() => @io.File::open(path)) is @io.Errno(_))
 }
+
+///|
+test "read at an explicit position" {
+  let path = @os_string.from_string("/tmp/co-io-test-pread")
+  let file = @io.File::open(path, access=WriteOnly, create=CreateOrTruncate)
+  let text = b"hello, io_uring!"
+  assert_eq(file.write(text), text.length())
+  file.close()
+  let file = @io.File::open(path)
+  let buf = FixedArray::make(16, b'\x00')
+  // `position` addresses the file, `offset` addresses the buffer: read "io_ur"
+  // into buf[4..9].
+  assert_eq(file.read(buf, offset=4, length=5, position=7), 5)
+  let dst = buf.unsafe_reinterpret_as_bytes()
+  assert_eq(dst[4:9], text[7:12])
+  // Re-reading the same position yields the same bytes: the file offset is
+  // untouched, unlike the streaming `read`.
+  assert_eq(file.read(buf, length=5, position=7), 5)
+  assert_eq(dst[:5], text[7:12])
+  file.close()
+}
+
+///|
+test "concurrent reads at fixed positions" {
+  let path = @os_string.from_string("/tmp/co-io-test-pread-concurrent")
+  let file = @io.File::open(path, access=WriteOnly, create=CreateOrTruncate)
+  let text = b"0123456789abcdef"
+  assert_eq(file.write(text), text.length())
+  file.close()
+  let file = @io.File::open(path)
+  // Two coroutines reading the same handle at different positions must each get
+  // their own bytes; this is the case the streaming `read` cannot do, because it
+  // shares (and advances) the kernel's file offset.
+  let buf0 = FixedArray::make(4, b'\x00')
+  let buf1 = FixedArray::make(4, b'\x00')
+  let f0 : @future.Promise[Int32, Error] = @future.Promise::new()
+  let f1 : @future.Promise[Int32, Error] = @future.Promise::new()
+  let _ = @coroutine.Coroutine(() => {
+    try file.read(buf0, position=0) catch {
+      error => f0.reject(error)
+    } noraise {
+      n => f0.resolve(n)
+    }
+  })
+  let _ = @coroutine.Coroutine(() => {
+    try file.read(buf1, position=4) catch {
+      error => f1.reject(error)
+    } noraise {
+      n => f1.resolve(n)
+    }
+  })
+  let n0 = f0.wait()
+  let n1 = f1.wait()
+  assert_eq(n0, 4)
+  assert_eq(n1, 4)
+  assert_eq(
+    buf0.unsafe_reinterpret_as_bytes()[:4].to_owned(),
+    text[:4].to_owned(),
+  )
+  assert_eq(
+    buf1.unsafe_reinterpret_as_bytes()[:4].to_owned(),
+    text[4:8].to_owned(),
+  )
+  file.close()
+}
