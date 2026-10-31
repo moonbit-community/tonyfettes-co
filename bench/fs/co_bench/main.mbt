@@ -48,6 +48,27 @@ fn mb_per_s(bytes : Int64, ns : Int64) -> Double {
 }
 
 ///|
+/// Zero-length reads: the full submit/suspend/resume path with almost no work in
+/// the kernel, which prices the runtime layer (allocations, coroutine switch,
+/// enter) separately from copying.
+fn run_nop(path : String, ops : Int32) -> Unit raise {
+  let file = open_ro(path)
+  let buffer = FixedArray::make(1, b'\x00')
+  let start = now_ns()
+  for _ in 0..<ops {
+    let n = file.read(buffer, length=0, position=0)
+    if n < 0 {
+      break
+    }
+  }
+  let elapsed = now_ns() - start
+  file.close()
+  println(
+    "nop: \{elapsed.to_double() / ops.to_double()} ns/op over \{ops} zero-length reads",
+  )
+}
+
+///|
 /// Sequential read: one coroutine, one handle, `mib` MiB from offset 0.
 fn run_seq(path : String, block : Int32, mib : Int32) -> Unit raise {
   let file = open_ro(path)
@@ -249,12 +270,13 @@ fn main raise {
   let args = @env.args()
   guard args.length() >= 2 else {
     println(
-      "usage: fs_bench <seq|rand|stall> ...  |  seq <path> <block> <mib>  |  rand <path> <block> <qd> <ops> <file_mib>  |  stall <hot> <cold> <block> <readers> <ops>",
+      "usage: fs_bench <seq|rand|stall|nop> ...  |  seq <path> <block> <mib>  |  rand <path> <block> <qd> <ops> <file_mib>  |  stall <hot> <cold> <block> <readers> <ops>",
     )
     return
   }
   match args[1] {
     "seq" => run_seq(args[2], int_arg(args, 3, 4096), int_arg(args, 4, 256))
+    "nop" => run_nop(args[2], int_arg(args, 3, 100000))
     "rand" =>
       run_rand(
         args[2],

@@ -7,6 +7,7 @@ Answers three different questions, because they have three different answers:
 | `seq` | what does a bulk read cost (bandwidth, µs/op)? |
 | `rand` | per-op cost and how far queue depth buys IOPS (QD sweep) |
 | `stall` | does one cold miss stall the other coroutines? |
+| `nop` | what does the submit/suspend/resume path cost with no work at all? |
 
 Both harnesses drive the *same* workloads: `bench/fs/co_bench` uses `co` +
 `co-io` (io_uring), `bench/fs/c/baseline.c` uses `pread` (1 thread, or N
@@ -94,6 +95,54 @@ makes tmpfs slow — the safety and the 4 µs tax are the same design decision.
 `pread` numbers at QD=16/64 come from N threads on N cores. Per thread the
 baseline is *slower* than one `co` thread; it only wins in aggregate because it
 is allowed to use the whole machine.
+
+## Why the gap to `pread` exists
+
+`bench/fs/c/uring_probe.c` drives the same 4 KiB read with no MoonBit and no
+coroutines (`pread`, raw io_uring, and raw io_uring with `batch` SQEs per
+`io_uring_enter`), which splits the difference into kernel and runtime:
+
+| 4 KiB hot, QD=1 | ns/op | |
+|---|---|---|
+| `pread` | 580 | one syscall, copy inline |
+| raw io_uring (`batch=1`) | 416 | same copy, plus one `io_uring_enter` |
+| raw io_uring (`batch=64`) | 247 | one enter per 64 reads |
+| `co` on btrfs | 816 | |
+| `co` on tmpfs | 4430 | |
+| `co`, zero-length read on btrfs (`nop`) | 310 | path cost with no copy |
+| `co`, zero-length read on tmpfs (`nop`) | 4049 | **still 4 µs** |
+
+Two completely different causes:
+
+**tmpfs: the kernel, not us.** A zero-length read still costs 4.0 µs, and a
+pure-C io_uring client pays the same 4.3 µs. tmpfs does not set `FMODE_NOWAIT`,
+so io_uring cannot attempt the read inline and punts *every* operation to an
+`io-wq` worker; the price is a worker wakeup per request. It is pure per-request
+overhead, so batching collapses it (raw ring: 4459 ns at `batch=1` → 666 ns at
+`batch=64`), and at QD=64 `co`'s tmpfs cost falls to 1.07 µs. Nothing in the
+MoonBit layer can fix this; a filesystem that supports nowait can.
+
+**btrfs: a fixed ~310 ns path, of which ~140 ns is ours.** `co`'s 4 KiB read is
+816 ns; the same path with a zero-length read is 310 ns, so the read itself
+costs `co` 506 ns against `pread`'s 580 ns total — the copy is not the problem.
+The 310 ns splits into
+
+* ~170 ns for `io_uring_enter` itself (raw ring: 416 ns/op at `batch=1` vs
+  247 ns at `batch=64`, i.e. one enter per op costs about that much), and
+* ~140 ns for the runtime layer: `IoResult` allocation per call, refcount
+  traffic on the four `#owned` FFI parameters, and two coroutine switches
+  (~90 ns for that pair alone, measured by `bench/co`'s pingpong).
+
+Hence the ratio only looks bad at QD=1. `strace -c` confirms the batching works
+exactly as intended — 16 reads per `io_uring_enter` at QD=16, 64 at QD=64 — and
+at QD≥16 the cost per core matches the thread baseline (1.52M IOPS on 0.99 core
+vs 1.55M per core across 16 threads).
+
+If this 140 ns is worth chasing, the cheapest wins are reusing `IoResult`
+instead of allocating one per call and dropping the refcount churn on the owned
+FFI parameters. `IORING_SETUP_SQPOLL` would remove the ~170 ns enter instead,
+but it burns a core for it, which is the wrong trade for a runtime that wants
+its cores for coroutines.
 
 ## Traps
 
