@@ -310,3 +310,37 @@ test "select send: a full buffer is drained by the recv case alone" {
   chan.send(3)
   assert_eq(chan.recv(), 3)
 }
+
+///|
+test "select send_to: a parked case is taken by a receiver" {
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(() => {
+      try! @select.select(s => chan.send_to(s, 4))
+      log.push("sent")
+    }),
+  )
+  assert_eq(chan.recv(), 4)
+  ignore(@coroutine.Coroutine(() => ()))
+  assert_eq(log, ["sent"])
+}
+
+///|
+test "select send_to: never matches a recv case of the same select" {
+  let chan : @channel.Channel[Unit] = @channel.Channel()
+  let log : Array[String] = []
+  ignore(
+    @coroutine.Coroutine(() => {
+      try! @select.select(s => {
+        chan.send_to(s, ())
+        chan.recv_to(s)
+      })
+      log.push("done")
+    }),
+  )
+  // Both cases parked; a receiver from outside takes the send case.
+  chan.recv()
+  ignore(@coroutine.Coroutine(() => ()))
+  assert_eq(log, ["done"])
+}
