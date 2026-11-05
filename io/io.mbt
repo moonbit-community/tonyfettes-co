@@ -8,9 +8,19 @@ priv type Io
 extern "c" fn Io::new() -> Io = "moonbit_co_io_create"
 
 ///|
+#derive(Debug)
 pub(all) suberror Errno {
   Errno(Int)
-} derive(Debug)
+}
+
+///|
+// `derive(Debug)` promotes `Debug::to_repr` to a regular method of `Errno`;
+// declare that promotion explicitly instead of relying on the deprecated
+// implicit form. Hidden from the interface — `Debug::to_repr` is the
+// supported call form for formatting an error.
+#deprecated("Use `Debug::to_repr` instead", skip_current_package=true)
+#doc(hidden)
+pub extend Errno with @debug.Debug::{to_repr}
 
 ///|
 #borrow(flags)
