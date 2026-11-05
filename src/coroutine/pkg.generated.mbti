@@ -7,11 +7,11 @@ package "tonyfettes/co/coroutine"
 
 // Types and methods
 type Coroutine
+#callsite(autofill(loc))
+pub fn Coroutine::Coroutine(loc~ : SourceLoc, name? : String, () -> Unit) -> Self
 #as_free_fn
 #deprecated
 pub fn Coroutine::current() -> Self
-#callsite(autofill(loc))
-pub fn Coroutine::new(loc~ : SourceLoc, name? : String, stack_size? : UInt64, () -> Unit) -> Self
 pub fn Coroutine::schedule(Self) -> Unit
 #as_free_fn
 #deprecated
