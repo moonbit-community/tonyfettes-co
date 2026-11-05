@@ -295,9 +295,10 @@ pub fn[T, R] Channel::send_map_to(
 /// Send `value` without waiting: to a parked receiver, or into the buffer.
 /// Returns whether it was sent.
 fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
-  // Redundant with `pop_front`'s own check, but `pop_front` is a call into
-  // another package that isn't inlined, while `is_empty` is: checking first
-  // keeps the common no-waiter case free of the call (~4 cycles per op).
+  // Redundant with `pop_front`'s own check, but it keeps the common
+  // no-waiter case to one comparison: the C compiler splits the waiter loop
+  // off into a separate, non-inlined part (~11 instructions per op in the
+  // chan bench without it).
   if !self.receivers.is_empty() {
     while self.receivers.pop_front() is Some(receiver) {
       match receiver {
@@ -343,8 +344,8 @@ fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
 /// Take the next value without waiting: from the buffer (refilling it from a
 /// parked sender), or straight from a parked sender when unbuffered.
 fn[T] Channel::try_recv(self : Channel[T]) -> T? {
-  // The `is_empty` checks skip the out-of-line `pop_front` call in the
-  // common no-waiter case, as in `try_send`.
+  // The `is_empty` checks keep the no-waiter case from calling the
+  // non-inlined `take_sender`, as in `try_send`.
   if self.length > 0 {
     let value = self.pop_buffer()
     if !self.senders.is_empty() && self.take_sender() is Some(next) {
