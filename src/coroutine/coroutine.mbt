@@ -196,6 +196,10 @@ pub fn Coroutine::Coroutine(f : () -> Unit) -> Coroutine {
   // here because #borrow(stack) on co_reset keeps the `stack` parameter alive
   // across the call, preventing munmap even if `callee` is decreffed early.
   co_reset(creator.context, coroutine.stack.unwrap(), f => f(), () => {
+    // Read the coroutine from the scheduler (it was made current just above)
+    // instead of capturing it: a closure with no captures is a static constant,
+    // so spawning doesn't allocate one.
+    let coroutine = scheduler.current
     // Run the body through the coroutine, which owns it: the parameter `f` is
     // decref'd when co_reset returns to the creator on the first suspend, so the
     // coroutine must be the reference that keeps the body (and its captures) alive.
