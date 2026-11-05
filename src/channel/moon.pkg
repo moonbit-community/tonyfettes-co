@@ -1,6 +1,6 @@
 import {
-  "moonbitlang/core/deque",
   "tonyfettes/co/coroutine",
+  "tonyfettes/co/internal/ring",
   "tonyfettes/co/select",
 }
 

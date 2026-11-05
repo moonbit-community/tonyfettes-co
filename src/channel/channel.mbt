@@ -16,9 +16,9 @@ struct Channel[T] {
   mut length : Int32
   // Parked receivers. Only non-empty while the buffer is empty and no sender
   // is parked.
-  receivers : @deque.Deque[Receiver[T]]
+  receivers : @ring.Ring[Receiver[T]]
   // Parked senders. Only non-empty while the buffer is full.
-  senders : @deque.Deque[Sender[T]]
+  senders : @ring.Ring[Sender[T]]
   mut closed : Error?
 }
 
@@ -71,8 +71,8 @@ pub fn[T] Channel::Channel(capacity~ : Int32 = 0) -> Channel[T] {
     buffer: FixedArray::make(capacity, None),
     head: 0,
     length: 0,
-    receivers: @deque.Deque([]),
-    senders: @deque.Deque([]),
+    receivers: @ring.Ring(),
+    senders: @ring.Ring(),
     closed: None,
   }
 }
