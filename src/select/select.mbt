@@ -3,7 +3,7 @@ pub(all) struct Selector[T] {
   mut coroutine : @coroutine.Coroutine?
   mut completed : Bool
   mut value : T?
-  mut thunk : (() -> T)?
+  mut thunk : (() -> T raise)?
 }
 
 ///|
@@ -12,7 +12,7 @@ pub fn[T] Selector::Selector() -> Selector[T] {
 }
 
 ///|
-pub fn[T] Selector::wait(self : Selector[T]) -> T {
+pub fn[T] Selector::wait(self : Selector[T]) -> T raise {
   if self.value is Some(value) {
     return value
   }
@@ -36,7 +36,7 @@ pub fn[T] Selector::wait(self : Selector[T]) -> T {
 
 ///|
 #locals(f)
-pub fn[R] select(f : (Selector[R]) -> Unit) -> R {
+pub fn[R] select(f : (Selector[R]) -> Unit raise) -> R raise {
   let selector = Selector()
   f(selector)
   selector.wait()

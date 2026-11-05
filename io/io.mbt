@@ -115,7 +115,7 @@ pub fn open(
   create~ : Bool = false,
   truncate~ : Bool = false,
   exclusive~ : Bool = false,
-) -> Handle raise Errno {
+) -> Handle raise {
   let value = Ref(0UL)
   let error = Ref(0)
   let flags : FixedArray[Byte] = [
@@ -140,7 +140,7 @@ pub fn read(
   buffer : FixedArray[Byte],
   offset~ : Int = 0,
   length~ : Int = buffer.length() - offset,
-) -> Int raise Errno {
+) -> Int raise {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
@@ -169,7 +169,7 @@ pub fn write(
   buffer : Bytes,
   offset~ : Int = 0,
   length~ : Int = buffer.length() - offset,
-) -> Int raise Errno {
+) -> Int raise {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
@@ -193,7 +193,7 @@ pub fn write(
 }
 
 ///|
-pub fn close(handle : Handle) -> Unit raise Errno {
+pub fn close(handle : Handle) -> Unit raise {
   let value = Ref(0UL)
   let error = Ref(0)
   submit_close(io, handle.0, value, error, @coroutine.current())

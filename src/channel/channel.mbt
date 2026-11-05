@@ -59,8 +59,8 @@ pub fn[T] Channel::recv_to(
 pub fn[T, R] Channel::recv_map_to(
   self : Channel[T],
   selected : @select.Selector[R],
-  f : (T) -> R,
-) -> Unit {
+  f : (T) -> R raise,
+) -> Unit raise {
   guard !selected.completed else { return }
   if self.values.pop_front() is Some(value) {
     selected.completed = true
@@ -81,7 +81,7 @@ pub fn[T, R] Channel::recv_map_to(
 }
 
 ///|
-pub fn[T] Channel::recv(self : Channel[T]) -> T {
+pub fn[T] Channel::recv(self : Channel[T]) -> T raise {
   if self.values.pop_front() is Some(value) {
     return value
   }

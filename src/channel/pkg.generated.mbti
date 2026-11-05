@@ -12,8 +12,8 @@ import {
 // Types and methods
 type Channel[T]
 pub fn[T] Channel::new() -> Self[T]
-pub fn[T] Channel::recv(Self[T]) -> T
-pub fn[T, R] Channel::recv_map_to(Self[T], @select.Selector[R], (T) -> R) -> Unit
+pub fn[T] Channel::recv(Self[T]) -> T raise
+pub fn[T, R] Channel::recv_map_to(Self[T], @select.Selector[R], (T) -> R raise) -> Unit raise
 pub fn[T] Channel::recv_to(Self[T], @select.Selector[T]) -> Unit
 pub fn[T] Channel::send(Self[T], T) -> Unit
 

@@ -17,6 +17,6 @@ pub fn[T, E] Promise::reject(self : Promise[T, E], error : E) -> Unit {
 }
 
 ///|
-pub fn[T, E : Error] Promise::wait(self : Promise[T, E]) -> T raise E {
+pub fn[T, E : Error] Promise::wait(self : Promise[T, E]) -> T raise {
   self.0.wait().unwrap_or_error()
 }

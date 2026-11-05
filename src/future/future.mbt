@@ -37,7 +37,7 @@ pub fn[T] Future::set(self : Future[T], value : T) -> Unit {
 }
 
 ///|
-pub fn[T] Future::wait(self : Future[T]) -> T {
+pub fn[T] Future::wait(self : Future[T]) -> T raise {
   if self.value is Some(value) {
     return value
   }
@@ -67,8 +67,8 @@ pub fn[T] Future::wait_to(
 pub fn[T, R] Future::wait_map_to(
   self : Future[T],
   selector : @select.Selector[R],
-  f : (T) -> R,
-) -> Unit {
+  f : (T) -> R raise,
+) -> Unit raise {
   guard !selector.completed else { return }
   if self.value is Some(value) {
     selector.completed = true
