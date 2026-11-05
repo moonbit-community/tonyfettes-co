@@ -129,6 +129,27 @@ test "Coroutine: spawn and complete" {
 }
 
 ///|
+test "Coroutine: a finished handle stays inert after its stack is reused" {
+  // `a` finishes inside the spawn, so its stack goes back to the pool.
+  let a = @coroutine.Coroutine(name="a", () => ())
+  // `b` takes that stack and parks on a gate nobody has opened yet.
+  let gate : @future.Future[Int] = @future.Future::new()
+  let finished : @future.Future[Unit] = @future.Future::new()
+  let mut got = -1
+  let _ = @coroutine.Coroutine(name="b", () => {
+    got = gate.wait()
+    finished.set(())
+  })
+  // Scheduling the stale handle must not wake `b`.
+  a.schedule()
+  // Give the scheduler a round: a woken `b` would run here and find no value.
+  let _ = @coroutine.Coroutine(name="round", () => ())
+  gate.set(1)
+  finished.wait()
+  assert_eq(got, 1)
+}
+
+///|
 test "Coroutine: FIFO scheduling order" {
   let order : Array[Int] = []
   let done = @channel.Channel::new()

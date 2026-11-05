@@ -54,7 +54,7 @@ fn State::to_string(self : State) -> String {
 
 ///|
 struct Coroutine {
-  mut name : String
+  name : String
   mut state : State
   context : Context
   stack : Stack?
@@ -96,11 +96,18 @@ fn Scheduler::allocate(
   state~ : State,
   func~ : () -> Unit,
 ) -> Coroutine {
-  if self.recycled.pop() is Some(coroutine) {
-    coroutine.name = name
-    coroutine.state = state
-    coroutine.func = Some(func)
-    return coroutine
+  // Reuse a finished coroutine's stack and context, but never the object itself:
+  // its creator may still hold it as a handle, and that handle must keep
+  // reporting `Stopped` (so `schedule()` stays a no-op) instead of aliasing the
+  // new coroutine.
+  if self.recycled.pop() is Some(done) {
+    return Coroutine::{
+      name,
+      state,
+      context: done.context,
+      stack: done.stack,
+      func: Some(func),
+    }
   }
   let stack = Stack::new(DEFAULT_STACK_SIZE)
   Coroutine::new(name~, state~, stack~, func~)
@@ -111,9 +118,10 @@ const RECYCLED_COROUTINE_LIMIT : Int = 16
 
 ///|
 fn Scheduler::recycle(self : Scheduler, coroutine : Coroutine) -> Unit {
-  guard self.recycled.length() < RECYCLED_COROUTINE_LIMIT else { return }
+  // Mark it finished whether or not the pool has room for its stack.
   coroutine.state = Stopped
   coroutine.func = None
+  guard self.recycled.length() < RECYCLED_COROUTINE_LIMIT else { return }
   self.recycled.push(coroutine)
 }
 
