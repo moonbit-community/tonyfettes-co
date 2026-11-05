@@ -15,6 +15,14 @@ pub fn[T] Selector::Selector() -> Selector[T] {
 }
 
 ///|
+/// Whether the select is still polling its cases: not completed, and `wait`
+/// has not started waiting. Its cases may already be queued on channels, but
+/// no sibling case may take them (a send and a receive on one channel).
+pub fn[T] Selector::is_polling(self : Selector[T]) -> Bool {
+  !self.completed && self.coroutine is None
+}
+
+///|
 /// The outcome of the completed case: its value, or the error it failed with.
 fn[T] Selector::outcome(self : Selector[T]) -> T? raise {
   if self.value is Some(value) {

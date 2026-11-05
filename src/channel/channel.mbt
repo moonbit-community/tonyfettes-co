@@ -30,17 +30,32 @@ priv enum Receiver[T] {
   Recv(@coroutine.Coroutine, mut value~ : T?)
   RecvTo(@select.Selector[T])
   // Called with the value, or with the close error (two arguments rather
-  // than a `Result`, so a wake doesn't allocate). Returns whether the case
-  // took it; a case whose `select` already completed declines.
-  RecvMapTo((T?, Error?) -> Bool)
+  // than a `Result`, so a wake doesn't allocate).
+  RecvMapTo((T?, Error?) -> Claim)
 }
 
 ///|
-/// A sender parked on the channel with the value it wants to hand over.
-priv struct Sender[T] {
-  coroutine : @coroutine.Coroutine
-  value : T
-  mut delivered : Bool
+/// What a `select` case queued on a channel did when offered a partner.
+priv enum Claim {
+  // It took part, completing its select.
+  Taken
+  // Its select already completed through another case; drop it.
+  Declined
+  // Its select is still polling its cases (see `Selector::is_polling`), so
+  // the offer comes from a sibling case: keep it queued and look no further,
+  // as every entry after it was queued by the same select.
+  Polling
+}
+
+///|
+/// A sender parked on the channel with the value it wants to hand over, one
+/// record per wait.
+priv enum Sender[T] {
+  Send(@coroutine.Coroutine, T, mut delivered~ : Bool)
+  // A `select` send case. Its callback is called when a receiver takes the
+  // value (with `None`) or when the channel is closed (with the error); the
+  // value is delivered only if the case is `Taken`.
+  SendTo(T, (Error?) -> Claim)
 }
 
 ///|
@@ -76,10 +91,10 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit raise {
     self.push_buffer(value)
     return
   }
-  let sender = { coroutine: @coroutine.current(), value, delivered: false, }
+  let sender = Send(@coroutine.current(), value, delivered=false)
   self.senders.push_back(sender)
   @coroutine.suspend()
-  if sender.delivered {
+  if sender is Send(_, _, delivered=true) {
     return
   }
   if self.closed is Some(error) {
@@ -137,7 +152,10 @@ pub fn[T] Channel::close(self : Channel[T], error : Error) -> Unit {
     }
   }
   while self.senders.pop_front() is Some(sender) {
-    sender.coroutine.schedule()
+    match sender {
+      Send(coroutine, _, ..) => coroutine.schedule()
+      SendTo(_, claim) => ignore(claim(Some(error)))
+    }
   }
 }
 
@@ -185,7 +203,8 @@ pub fn[T, R] Channel::recv_map_to(
   }
   self.receivers.push_back(
     RecvMapTo((value, error) => {
-      guard !selector.completed else { false }
+      guard !selector.completed else { Declined }
+      guard error is Some(_) || !selector.is_polling() else { Polling }
       selector.completed = true
       if selector.coroutine is Some(coroutine) {
         coroutine.schedule()
@@ -195,7 +214,70 @@ pub fn[T, R] Channel::recv_map_to(
       } else if error is Some(error) {
         fail(selector, error)
       }
-      true
+      Taken
+    }),
+  )
+}
+
+///|
+/// A `select` case sending `value`; the select's value is `()`.
+pub fn[T] Channel::send_to(
+  self : Channel[T],
+  selector : @select.Selector[Unit],
+  value : T,
+) -> Unit {
+  self.send_map_to(selector, value, () => ())
+}
+
+///|
+/// A `select` case sending `value`. Once it is sent, the select's value is
+/// `f()`; a case that loses the select does not send.
+///
+/// A closed channel fails the case: the select raises the close error.
+pub fn[T, R] Channel::send_map_to(
+  self : Channel[T],
+  selector : @select.Selector[R],
+  value : T,
+  f : () -> R raise,
+) -> Unit {
+  guard !selector.completed else { return }
+  if self.closed is Some(error) {
+    selector.completed = true
+    fail(selector, error)
+    return
+  }
+  let sent = if self.hand_to_receiver(value) {
+    true
+  } else if self.length < self.buffer.length() {
+    self.push_buffer(value)
+    true
+  } else {
+    false
+  }
+  if sent {
+    selector.completed = true
+    selector.value = Some(f()) catch {
+      error => {
+        fail(selector, error)
+        None
+      }
+    }
+    return
+  }
+  self.senders.push_back(
+    SendTo(value, error => {
+      guard !selector.completed else { Declined }
+      guard error is Some(_) || !selector.is_polling() else { Polling }
+      selector.completed = true
+      if selector.coroutine is Some(coroutine) {
+        coroutine.schedule()
+      }
+      if error is Some(error) {
+        fail(selector, error)
+      } else {
+        selector.thunk = Some(f)
+      }
+      Taken
     }),
   )
 }
@@ -212,6 +294,10 @@ fn[T] Channel::hand_to_receiver(self : Channel[T], value : T) -> Bool {
         coroutine.schedule()
         return true
       }
+      RecvTo(selector) as receiver if selector.is_polling() => {
+        self.receivers.push_front(receiver)
+        return false
+      }
       RecvTo({ completed: false, coroutine, .. } as selector) => {
         selector.completed = true
         selector.value = Some(value)
@@ -220,7 +306,15 @@ fn[T] Channel::hand_to_receiver(self : Channel[T], value : T) -> Bool {
         }
         return true
       }
-      RecvMapTo(func) => if func(Some(value), None) { return true }
+      RecvMapTo(claim) as receiver =>
+        match claim(Some(value), None) {
+          Taken => return true
+          Declined => continue
+          Polling => {
+            self.receivers.push_front(receiver)
+            return false
+          }
+        }
       // A case of a `select` that already completed elsewhere.
       _ => continue
     }
@@ -234,17 +328,35 @@ fn[T] Channel::hand_to_receiver(self : Channel[T], value : T) -> Bool {
 fn[T] Channel::take(self : Channel[T]) -> T? {
   if self.length > 0 {
     let value = self.pop_buffer()
-    if !self.senders.is_empty() && self.senders.pop_front() is Some(sender) {
-      self.push_buffer(sender.value)
-      sender.delivered = true
-      sender.coroutine.schedule()
+    if !self.senders.is_empty() && self.take_sender() is Some(next) {
+      self.push_buffer(next)
     }
     return Some(value)
   }
-  if !self.senders.is_empty() && self.senders.pop_front() is Some(sender) {
-    sender.delivered = true
-    sender.coroutine.schedule()
-    return Some(sender.value)
+  guard !self.senders.is_empty() else { return None }
+  self.take_sender()
+}
+
+///|
+/// Take the value of the first parked sender still sending, waking it.
+fn[T] Channel::take_sender(self : Channel[T]) -> T? {
+  while self.senders.pop_front() is Some(sender) {
+    match sender {
+      Send(coroutine, value, ..) as sender => {
+        sender.delivered = true
+        coroutine.schedule()
+        return Some(value)
+      }
+      SendTo(value, claim) as sender =>
+        match claim(None) {
+          Taken => return Some(value)
+          Declined => continue
+          Polling => {
+            self.senders.push_front(sender)
+            return None
+          }
+        }
+    }
   }
   None
 }

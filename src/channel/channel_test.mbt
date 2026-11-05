@@ -184,3 +184,129 @@ test "select takes the value from a parked sender" {
   ignore(@coroutine.Coroutine(() => try! chan.send(5)))
   assert_eq(@select.select(selector => chan.recv_to(selector)), 5)
 }
+
+///|
+test "select send: hands the value to a parked receiver" {
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let got : Array[Int32] = []
+  ignore(@coroutine.Coroutine(() => try! got.push(chan.recv())))
+  let r = @select.select(s => chan.send_map_to(s, 1, () => "sent"))
+  assert_eq(r, "sent")
+  // The receiver is runnable; give it a turn.
+  ignore(@coroutine.Coroutine(() => ()))
+  assert_eq(got, [1])
+}
+
+///|
+test "select send: fills free buffer space" {
+  let chan : @channel.Channel[Int32] = @channel.Channel(capacity=1)
+  @select.select(s => chan.send_to(s, 7))
+  assert_eq(chan.recv(), 7)
+}
+
+///|
+test "select send: parks until a receiver takes the value" {
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let result : @channel.Channel[String] = @channel.Channel(capacity=1)
+  ignore(
+    @coroutine.Coroutine(() => {
+      try! result.send(
+        @select.select(s => chan.send_map_to(s, 5, () => "sent")),
+      )
+    }),
+  )
+  assert_eq(chan.recv(), 5)
+  assert_eq(result.recv(), "sent")
+}
+
+///|
+test "select send: a send case meets a recv case of another select" {
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let result : @channel.Channel[String] = @channel.Channel(capacity=1)
+  ignore(
+    @coroutine.Coroutine(() => {
+      try! result.send(
+        @select.select(s => chan.send_map_to(s, 3, () => "sent")),
+      )
+    }),
+  )
+  assert_eq(@select.select(s => chan.recv_to(s)), 3)
+  assert_eq(result.recv(), "sent")
+}
+
+///|
+test "select send: a closed channel fails the case" {
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  chan.close(Done)
+  assert_eq(raises_done(() => @select.select(s => chan.send_to(s, 1))), true)
+}
+
+///|
+test "select send: closing the channel fails a parked case" {
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let failed : Array[Bool] = []
+  ignore(
+    @coroutine.Coroutine(() => {
+      failed.push(raises_done(() => @select.select(s => chan.send_to(s, 1))))
+    }),
+  )
+  chan.close(Done)
+  ignore(@coroutine.Coroutine(() => ()))
+  assert_eq(failed, [true])
+}
+
+///|
+test "select send: a losing send case does not send" {
+  let a : @channel.Channel[Int32] = @channel.Channel()
+  let b : @channel.Channel[Int32] = @channel.Channel()
+  let result : @channel.Channel[String] = @channel.Channel(capacity=1)
+  ignore(
+    @coroutine.Coroutine(() => {
+      try! result.send(
+        @select.select(s => {
+          a.send_map_to(s, 1, () => "sent a")
+          b.recv_map_to(s, x => "recv b \{x}")
+        }),
+      )
+    }),
+  )
+  b.send(2)
+  assert_eq(result.recv(), "recv b 2")
+  // The case on `a` lost: a receiver must not get its value.
+  ignore(@coroutine.Coroutine(() => try! a.send(9)))
+  assert_eq(a.recv(), 9)
+}
+
+///|
+test "select send: a send and a recv case on one channel never match each other" {
+  // Unbuffered and nobody else on the channel: both cases park, and the
+  // select only completes when another coroutine receives.
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let result : @channel.Channel[String] = @channel.Channel(capacity=1)
+  ignore(
+    @coroutine.Coroutine(() => {
+      try! result.send(
+        @select.select(s => {
+          chan.send_map_to(s, 1, () => "sent")
+          chan.recv_map_to(s, x => "recv \{x}")
+        }),
+      )
+    }),
+  )
+  assert_eq(chan.recv(), 1)
+  assert_eq(result.recv(), "sent")
+}
+
+///|
+test "select send: a full buffer is drained by the recv case alone" {
+  let chan : @channel.Channel[Int32] = @channel.Channel(capacity=1)
+  chan.send(7)
+  let r = @select.select(s => {
+    chan.send_map_to(s, 2, () => "sent")
+    chan.recv_map_to(s, x => "recv \{x}")
+  })
+  assert_eq(r, "recv 7")
+  // The send case lost, so 2 was never buffered.
+  chan.send(3)
+  assert_eq(chan.recv(), 3)
+}
