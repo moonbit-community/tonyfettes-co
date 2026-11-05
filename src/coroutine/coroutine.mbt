@@ -54,7 +54,6 @@ fn State::to_string(self : State) -> String {
 
 ///|
 struct Coroutine {
-  name : String
   mut state : State
   context : Context
   stack : Stack?
@@ -68,12 +67,11 @@ struct Coroutine {
 
 ///|
 fn Coroutine::new(
-  name~ : String,
   state~ : State,
   stack? : Stack,
   func? : () -> Unit,
 ) -> Coroutine {
-  Coroutine::{ name, state, context: Context::new(), stack, func, }
+  Coroutine::{ state, context: Context::new(), stack, func, }
 }
 
 ///|
@@ -85,14 +83,13 @@ priv struct Scheduler {
 
 ///|
 fn Scheduler::new() -> Scheduler {
-  let main = Coroutine::new(name="main", state=Running)
+  let main = Coroutine::new(state=Running)
   Scheduler::{ current: main, ready: @deque.Deque([]), recycled: [], }
 }
 
 ///|
 fn Scheduler::allocate(
   self : Scheduler,
-  name~ : String,
   state~ : State,
   func~ : () -> Unit,
 ) -> Coroutine {
@@ -102,7 +99,6 @@ fn Scheduler::allocate(
   // new coroutine.
   if self.recycled.pop() is Some(done) {
     return Coroutine::{
-      name,
       state,
       context: done.context,
       stack: done.stack,
@@ -110,7 +106,7 @@ fn Scheduler::allocate(
     }
   }
   let stack = Stack::new(DEFAULT_STACK_SIZE)
-  Coroutine::new(name~, state~, stack~, func~)
+  Coroutine::new(state~, stack~, func~)
 }
 
 ///|
@@ -190,14 +186,9 @@ pub fn Coroutine::schedule(self : Coroutine) -> Unit {
 const DEFAULT_STACK_SIZE : UInt64 = 65536
 
 ///|
-#callsite(autofill(loc))
-pub fn Coroutine::Coroutine(
-  loc~ : SourceLoc,
-  name~ : String = loc.to_string(),
-  f : () -> Unit,
-) -> Coroutine {
+pub fn Coroutine::Coroutine(f : () -> Unit) -> Coroutine {
   let creator = scheduler.current
-  let coroutine = scheduler.allocate(name~, state=Running, func=f)
+  let coroutine = scheduler.allocate(state=Running, func=f)
   creator.state = Scheduled
   scheduler.schedule(creator)
   scheduler.current = coroutine
@@ -209,14 +200,12 @@ pub fn Coroutine::Coroutine(
     // decref'd when co_reset returns to the creator on the first suspend, so the
     // coroutine must be the reference that keeps the body (and its captures) alive.
     guard coroutine.func is Some(body) else {
-      abort(
-        "@tonyfettes/co/coroutine: coroutine \{coroutine.name} started with no body",
-      )
+      abort("@tonyfettes/co/coroutine: coroutine started with no body")
     }
     body()
     guard coroutine.state is Running else {
       abort(
-        "@tonyfettes/co/coroutine: coroutine \{coroutine.name} not Running at completion (\{coroutine.state.to_string()})",
+        "@tonyfettes/co/coroutine: coroutine not Running at completion (\{coroutine.state.to_string()})",
       )
     }
     let next = scheduler.next()
