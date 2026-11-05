@@ -10,7 +10,7 @@ extern "c" fn Io::new() -> Io = "moonbit_co_io_create"
 ///|
 #derive(Debug)
 pub(all) suberror Errno {
-  Errno(Int)
+  Errno(Int32)
 }
 
 ///|
@@ -30,7 +30,7 @@ extern "c" fn submit_open(
   path : Bytes,
   flags : FixedArray[Byte],
   value : Ref[UInt64],
-  error : Ref[Int],
+  error : Ref[Int32],
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_open"
 
@@ -40,10 +40,10 @@ extern "c" fn submit_read(
   io : Io,
   handle : UInt64,
   buffer : FixedArray[Byte],
-  offset : Int,
-  length : Int,
+  offset : Int32,
+  length : Int32,
   value : Ref[UInt64],
-  error : Ref[Int],
+  error : Ref[Int32],
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_read"
 
@@ -53,10 +53,10 @@ extern "c" fn submit_write(
   io : Io,
   handle : UInt64,
   buffer : Bytes,
-  offset : Int,
-  length : Int,
+  offset : Int32,
+  length : Int32,
   value : Ref[UInt64],
-  error : Ref[Int],
+  error : Ref[Int32],
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_write"
 
@@ -66,7 +66,7 @@ extern "c" fn submit_close(
   io : Io,
   handle : UInt64,
   value : Ref[UInt64],
-  error : Ref[Int],
+  error : Ref[Int32],
   coroutine : @coroutine.Coroutine,
 ) = "moonbit_co_io_submit_close"
 
@@ -75,7 +75,7 @@ extern "c" fn submit_close(
 extern "c" fn io_poll(
   io : Io,
   coroutines : FixedArray[@coroutine.Coroutine],
-  length : Ref[Int],
+  length : Ref[Int32],
   timeout : Int64,
 ) = "moonbit_co_io_poll"
 
@@ -83,10 +83,10 @@ extern "c" fn io_poll(
 /// POSIX `EINVAL`, raised for out-of-range offset/length arguments before they
 /// reach the native backends (where a negative length would be reinterpreted as
 /// a huge unsigned size).
-const EINVAL : Int = 22
+const EINVAL : Int32 = 22
 
 ///|
-let max_completions : Int = 256
+let max_completions : Int32 = 256
 
 ///|
 let io : Io = Io::new()
@@ -109,12 +109,12 @@ pub fn suspend() -> Unit {
 ///|
 pub fn open(
   path : Bytes,
-  read? : Bool = true,
-  write? : Bool = false,
-  append? : Bool = false,
-  create? : Bool = false,
-  truncate? : Bool = false,
-  exclusive? : Bool = false,
+  read~ : Bool = true,
+  write~ : Bool = false,
+  append~ : Bool = false,
+  create~ : Bool = false,
+  truncate~ : Bool = false,
+  exclusive~ : Bool = false,
 ) -> Handle raise Errno {
   let value = Ref(0UL)
   let error = Ref(0)
@@ -138,9 +138,9 @@ pub fn open(
 pub fn read(
   handle : Handle,
   buffer : FixedArray[Byte],
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
-) -> Int raise Errno {
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise Errno {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }
@@ -167,9 +167,9 @@ pub fn read(
 pub fn write(
   handle : Handle,
   buffer : Bytes,
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
-) -> Int raise Errno {
+  offset~ : Int32 = 0,
+  length~ : Int32 = buffer.length() - offset,
+) -> Int32 raise Errno {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
   }

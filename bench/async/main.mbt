@@ -1,20 +1,20 @@
 ///|
-const PINGPONG_ROUNDS : Int = 1_000_000
+const PINGPONG_ROUNDS : Int32 = 1_000_000
 
 ///|
-const CHAN_OPS : Int = 1_000_000
+const CHAN_OPS : Int32 = 1_000_000
 
 ///|
-const CHAIN_ROUNDS : Int = 200_000
+const CHAIN_ROUNDS : Int32 = 200_000
 
 ///|
-const CHAIN_DEPTH : Int = 30
+const CHAIN_DEPTH : Int32 = 30
 
 ///|
-const SPAWN_TASKS : Int = 200_000
+const SPAWN_TASKS : Int32 = 200_000
 
 ///|
-const PARKED_TASKS : Int = 100_000
+const PARKED_TASKS : Int32 = 100_000
 
 ///|
 async fn run(name : String, f : async () -> Unit) -> Unit {
@@ -27,7 +27,7 @@ async fn run(name : String, f : async () -> Unit) -> Unit {
 ///|
 /// Queue throughput without any suspension: fill then drain.
 async fn bench_chan() -> Unit {
-  let queue : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
+  let queue : @aqueue.Queue[Int32] = @aqueue.Queue(kind=Unbounded)
   for i in 0..<CHAN_OPS {
     queue.put(i)
   }
@@ -43,8 +43,8 @@ async fn bench_chan() -> Unit {
 ///|
 /// Two tasks bouncing a token: 2 suspensions + 2 queue ops per round.
 async fn bench_pingpong() -> Unit {
-  let ping : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
-  let pong : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
+  let ping : @aqueue.Queue[Int32] = @aqueue.Queue(kind=Unbounded)
+  let pong : @aqueue.Queue[Int32] = @aqueue.Queue(kind=Unbounded)
   @mb_async.with_task_group(group => {
     group.spawn_bg(() => {
       for _ in 0..<PINGPONG_ROUNDS {
@@ -61,10 +61,10 @@ async fn bench_pingpong() -> Unit {
 ///|
 /// Non-tail recursion so every level keeps a real frame.
 async fn chain(
-  depth : Int,
-  ping : @aqueue.Queue[Int],
-  pong : @aqueue.Queue[Int],
-) -> Int {
+  depth : Int32,
+  ping : @aqueue.Queue[Int32],
+  pong : @aqueue.Queue[Int32],
+) -> Int32 {
   if depth == 0 {
     pong.put(ping.get())
     1
@@ -76,8 +76,8 @@ async fn chain(
 ///|
 /// Same as pingpong, but the echo side suspends under a 30-frame async chain.
 async fn bench_chain() -> Unit {
-  let ping : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
-  let pong : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
+  let ping : @aqueue.Queue[Int32] = @aqueue.Queue(kind=Unbounded)
+  let pong : @aqueue.Queue[Int32] = @aqueue.Queue(kind=Unbounded)
   @mb_async.with_task_group(group => {
     group.spawn_bg(() => {
       for _ in 0..<CHAIN_ROUNDS {

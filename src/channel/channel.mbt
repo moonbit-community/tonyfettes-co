@@ -13,7 +13,7 @@ priv enum Reader[T] {
 
 ///|
 pub fn[T] Channel::new() -> Channel[T] {
-  Channel::{ values: @deque.Deque([]), readers: @deque.Deque([]) }
+  Channel::{ values: @deque.Deque([]), readers: @deque.Deque([]), }
 }
 
 ///|

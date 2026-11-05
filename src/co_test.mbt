@@ -49,7 +49,7 @@ test "Bidirectional: f <-> g" {
 
 ///|
 test "Channel: values follow FIFO" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let done = @channel.Channel::new()
   chan.send(1)
   chan.send(2)
@@ -67,7 +67,7 @@ test "Channel: values follow FIFO" {
 
 ///|
 test "Channel: readers follow FIFO" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let done : @channel.Channel[Unit] = @channel.Channel::new()
   let results = []
   let _ = @coroutine.Coroutine::new(name="reader1", () => {
@@ -130,7 +130,7 @@ test "Coroutine: spawn and complete" {
 
 ///|
 test "Coroutine: FIFO scheduling order" {
-  let order : Array[Int] = []
+  let order : Array[Int32] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="a", () => {
     order.push(1)
@@ -153,7 +153,7 @@ test "Coroutine: FIFO scheduling order" {
 ///|
 test "Future: multiple waiters" {
   let f = @future.Future::new()
-  let results : Array[Int] = []
+  let results : Array[Int32] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="w1", () => {
     results.push(f.wait())
@@ -176,7 +176,7 @@ test "Future: multiple waiters" {
 
 ///|
 test "Channel: send wakes one reader" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let woken : Array[String] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="r1", () => {

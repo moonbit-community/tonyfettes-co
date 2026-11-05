@@ -4,8 +4,8 @@
 // mapper runs, the sibling case also claims and consumes its value, which is
 // then silently dropped when the outer assignment overwrites the box.
 test "select: mapper re-entering a sibling case must not consume it" {
-  let a : @channel.Channel[Int] = @channel.Channel::new()
-  let b : @channel.Channel[Int] = @channel.Channel::new()
+  let a : @channel.Channel[Int32] = @channel.Channel::new()
+  let b : @channel.Channel[Int32] = @channel.Channel::new()
   let log : Array[String] = []
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="selector", () => {

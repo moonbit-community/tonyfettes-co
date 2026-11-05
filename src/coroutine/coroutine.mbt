@@ -73,7 +73,7 @@ fn Coroutine::raw(
   stack? : Stack,
   func? : () -> Unit,
 ) -> Coroutine {
-  Coroutine::{ name, state, context: Context::new(), stack, func }
+  Coroutine::{ name, state, context: Context::new(), stack, func, }
 }
 
 ///|
@@ -85,7 +85,7 @@ priv struct Scheduler {
 ///|
 fn Scheduler::new() -> Scheduler {
   let main = Coroutine::raw(name="main", state=Running)
-  Scheduler::{ curr: Ref(main), ready: @deque.Deque([]) }
+  Scheduler::{ curr: Ref(main), ready: @deque.Deque([]), }
 }
 
 ///|
@@ -153,8 +153,8 @@ pub fn Coroutine::schedule(self : Coroutine) -> Unit {
 #callsite(autofill(loc))
 pub fn Coroutine::new(
   loc~ : SourceLoc,
-  name? : String = loc.to_string(),
-  stack_size? : UInt64 = 65536,
+  name~ : String = loc.to_string(),
+  stack_size~ : UInt64 = 65536,
   f : () -> Unit,
 ) -> Coroutine {
   let creator = scheduler.curr.val

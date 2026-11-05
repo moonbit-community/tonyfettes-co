@@ -20,4 +20,3 @@ pub fn[T] Channel::send(Self[T], T) -> Unit
 // Type aliases
 
 // Traits
-

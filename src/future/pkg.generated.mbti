@@ -26,4 +26,3 @@ pub fn[T, E : Error] Promise::wait(Self[T, E]) -> T raise E
 // Type aliases
 
 // Traits
-

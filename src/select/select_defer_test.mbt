@@ -4,7 +4,7 @@
 // stack during `send`. This is asserted via ordering so a reintroduced eager
 // path fails with a clean diff instead of deadlocking.
 test "select: wake-path mapper is deferred past send()" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let order : Array[String] = []
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="selector", () => {
@@ -33,8 +33,8 @@ test "select: wake-path mapper is deferred past send()" {
 // never be scheduled, and this would hang. Deferring `f` to the selector lets
 // the sender finish both sends first.
 test "select: mapper may block on another channel without deadlocking" {
-  let c1 : @channel.Channel[Int] = @channel.Channel::new()
-  let c2 : @channel.Channel[Int] = @channel.Channel::new()
+  let c1 : @channel.Channel[Int32] = @channel.Channel::new()
+  let c2 : @channel.Channel[Int32] = @channel.Channel::new()
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine::new(name="selector", () => {
     let selector = @select.Selector()
