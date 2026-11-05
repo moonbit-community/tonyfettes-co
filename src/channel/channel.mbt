@@ -86,11 +86,7 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit raise {
   if self.closed is Some(error) {
     raise error
   }
-  if self.hand_to_receiver(value) {
-    return
-  }
-  if self.length < self.buffer.length() {
-    self.push_buffer(value)
+  if self.try_send(value) {
     return
   }
   let sender = Send(@coroutine.current(), value, delivered=false)
@@ -110,7 +106,7 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit raise {
 ///
 /// Once the channel is closed and its buffer drained, raises the close error.
 pub fn[T] Channel::recv(self : Channel[T]) -> T raise {
-  if self.take() is Some(value) {
+  if self.try_recv() is Some(value) {
     return value
   }
   if self.closed is Some(error) {
@@ -175,7 +171,7 @@ pub fn[T] Channel::recv_to(
   selector : @select.Selector[T],
 ) -> Unit {
   guard !selector.completed else { return }
-  if self.take() is Some(value) {
+  if self.try_recv() is Some(value) {
     selector.completed = true
     selector.value = Some(value)
     return
@@ -195,7 +191,7 @@ pub fn[T, R] Channel::recv_map_to(
   f : (T) -> R raise,
 ) -> Unit {
   guard !selector.completed else { return }
-  if self.take() is Some(value) {
+  if self.try_recv() is Some(value) {
     selector.completed = true
     // A failing mapper fails the select: `wait` raises its error.
     selector.value = Some(f(value)) catch {
@@ -242,7 +238,7 @@ pub fn[T] Channel::send_to(
     fail(selector, error)
     return
   }
-  if self.offer(value) {
+  if self.try_send(value) {
     selector.completed = true
     selector.value = Some(())
     return
@@ -267,7 +263,7 @@ pub fn[T, R] Channel::send_map_to(
     fail(selector, error)
     return
   }
-  if self.offer(value) {
+  if self.try_send(value) {
     selector.completed = true
     selector.value = Some(f()) catch {
       error => {
@@ -298,7 +294,7 @@ pub fn[T, R] Channel::send_map_to(
 ///|
 /// Send `value` without waiting: to a parked receiver, or into the buffer.
 /// Returns whether it was sent.
-fn[T] Channel::offer(self : Channel[T], value : T) -> Bool {
+fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
   if self.hand_to_receiver(value) {
     return true
   }
@@ -350,7 +346,7 @@ fn[T] Channel::hand_to_receiver(self : Channel[T], value : T) -> Bool {
 ///|
 /// Take the next value without waiting: from the buffer (refilling it from a
 /// parked sender), or straight from a parked sender when unbuffered.
-fn[T] Channel::take(self : Channel[T]) -> T? {
+fn[T] Channel::try_recv(self : Channel[T]) -> T? {
   if self.length > 0 {
     let value = self.pop_buffer()
     if !self.senders.is_empty() && self.take_sender() is Some(next) {
