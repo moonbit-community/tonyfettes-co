@@ -16,7 +16,6 @@ pub(all) struct Selector[T] {
   mut completed : Bool
   mut value : T?
   mut thunk : (() -> T raise)?
-  mut error : Error?
 }
 pub fn[T] Selector::Selector() -> Self[T]
 pub fn[T] Selector::wait(Self[T]) -> T raise

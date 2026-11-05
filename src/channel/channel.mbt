@@ -25,7 +25,9 @@ struct Channel[T] {
 ///|
 /// A receiver parked on the channel, one record per wait.
 priv enum Receiver[T] {
-  Recv(@coroutine.Coroutine, mut value~ : T?, mut error~ : Error?)
+  // The record carries no close error: a receiver woken without a value reads
+  // it from the channel, which keeps this per-wait allocation small.
+  Recv(@coroutine.Coroutine, mut value~ : T?)
   RecvTo(@select.Selector[T])
   // Called with the value, or with the close error (two arguments rather
   // than a `Result`, so a wake doesn't allocate). Returns whether the case
@@ -39,7 +41,6 @@ priv struct Sender[T] {
   coroutine : @coroutine.Coroutine
   value : T
   mut delivered : Bool
-  mut error : Error?
 }
 
 ///|
@@ -75,18 +76,13 @@ pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit raise {
     self.push_buffer(value)
     return
   }
-  let sender = {
-    coroutine: @coroutine.current(),
-    value,
-    delivered: false,
-    error: None,
-  }
+  let sender = { coroutine: @coroutine.current(), value, delivered: false, }
   self.senders.push_back(sender)
   @coroutine.suspend()
   if sender.delivered {
     return
   }
-  if sender.error is Some(error) {
+  if self.closed is Some(error) {
     raise error
   }
   abort("@tonyfettes/co/channel: send woke up but the value was not taken")
@@ -103,13 +99,13 @@ pub fn[T] Channel::recv(self : Channel[T]) -> T raise {
   if self.closed is Some(error) {
     raise error
   }
-  let receiver = Recv(@coroutine.current(), value=None, error=None)
+  let receiver = Recv(@coroutine.current(), value=None)
   self.receivers.push_back(receiver)
   @coroutine.suspend()
-  if receiver is Recv(_, value=Some(value), ..) {
+  if receiver is Recv(_, value=Some(value)) {
     return value
   }
-  if receiver is Recv(_, error=Some(error), ..) {
+  if self.closed is Some(error) {
     raise error
   }
   abort("@tonyfettes/co/channel: recv woke up but no value available")
@@ -128,13 +124,10 @@ pub fn[T] Channel::close(self : Channel[T], error : Error) -> Unit {
   self.closed = Some(error)
   while self.receivers.pop_front() is Some(receiver) {
     match receiver {
-      Recv(coroutine, ..) as receiver => {
-        receiver.error = Some(error)
-        coroutine.schedule()
-      }
+      Recv(coroutine, ..) => coroutine.schedule()
       RecvTo({ completed: false, coroutine, .. } as selector) => {
         selector.completed = true
-        selector.error = Some(error)
+        fail(selector, error)
         if coroutine is Some(coroutine) {
           coroutine.schedule()
         }
@@ -144,7 +137,6 @@ pub fn[T] Channel::close(self : Channel[T], error : Error) -> Unit {
     }
   }
   while self.senders.pop_front() is Some(sender) {
-    sender.error = Some(error)
     sender.coroutine.schedule()
   }
 }
@@ -162,7 +154,7 @@ pub fn[T] Channel::recv_to(
   }
   if self.closed is Some(error) {
     selector.completed = true
-    selector.error = Some(error)
+    fail(selector, error)
     return
   }
   self.receivers.push_back(RecvTo(selector))
@@ -180,7 +172,7 @@ pub fn[T, R] Channel::recv_map_to(
     // A failing mapper fails the select: `wait` raises its error.
     selector.value = Some(f(value)) catch {
       error => {
-        selector.error = Some(error)
+        fail(selector, error)
         None
       }
     }
@@ -188,7 +180,7 @@ pub fn[T, R] Channel::recv_map_to(
   }
   if self.closed is Some(error) {
     selector.completed = true
-    selector.error = Some(error)
+    fail(selector, error)
     return
   }
   self.receivers.push_back(
@@ -200,8 +192,8 @@ pub fn[T, R] Channel::recv_map_to(
       }
       if value is Some(value) {
         selector.thunk = Some(() => f(value))
-      } else {
-        selector.error = error
+      } else if error is Some(error) {
+        fail(selector, error)
       }
       true
     }),
@@ -276,4 +268,11 @@ fn[T] Channel::pop_buffer(self : Channel[T]) -> T {
   self.head = if next == self.buffer.length() { 0 } else { next }
   self.length -= 1
   value
+}
+
+///|
+/// Make `selector`'s `wait` raise `error`. Stored as the thunk so `Selector`
+/// needs no error field; the closure is only allocated on this failure path.
+fn[R] fail(selector : @select.Selector[R], error : Error) -> Unit {
+  selector.thunk = Some(() => raise error)
 }

@@ -3,16 +3,15 @@ pub(all) struct Selector[T] {
   mut coroutine : @coroutine.Coroutine?
   mut completed : Bool
   mut value : T?
-  // The completed case's mapper, applied to its value once `wait` resumes.
+  // Computes the completed case's outcome once `wait` resumes: applies its
+  // mapper, or raises the error it failed with (e.g. its channel's close
+  // error).
   mut thunk : (() -> T raise)?
-  // Set when the case that completed the select failed, e.g. its channel was
-  // closed; `wait` raises it.
-  mut error : Error?
 }
 
 ///|
 pub fn[T] Selector::Selector() -> Selector[T] {
-  { coroutine: None, completed: false, value: None, thunk: None, error: None, }
+  { coroutine: None, completed: false, value: None, thunk: None, }
 }
 
 ///|
@@ -25,9 +24,6 @@ fn[T] Selector::outcome(self : Selector[T]) -> T? raise {
     let value = thunk()
     self.value = Some(value)
     return Some(value)
-  }
-  if self.error is Some(error) {
-    raise error
   }
   None
 }
