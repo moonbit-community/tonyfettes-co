@@ -1,7 +1,8 @@
 ///|
 test "select leaves zombie reader on early poll win" {
-  let a : @channel.Channel[Int32] = @channel.Channel::new() // 空,case 会注册 reader
-  let b : @channel.Channel[Int32] = @channel.Channel::new()
+  // Buffered, so a value nobody receives yet stays in the channel.
+  let a : @channel.Channel[Int32] = @channel.Channel(capacity=1) // 空,case 会注册 reader
+  let b : @channel.Channel[Int32] = @channel.Channel(capacity=1)
   b.send(1) // case 2 poll 阶段直接命中
   let first = @select.select <| selector => {
     a.recv_to(selector)

@@ -4,24 +4,27 @@
 // mapper runs, the sibling case also claims and consumes its value, which is
 // then silently dropped when the outer assignment overwrites the box.
 test "select: mapper re-entering a sibling case must not consume it" {
-  let a : @channel.Channel[Int32] = @channel.Channel::new()
-  let b : @channel.Channel[Int32] = @channel.Channel::new()
+  let a : @channel.Channel[Int32] = @channel.Channel()
+  // Buffered, so the mapper's send stays in the channel instead of blocking.
+  let b : @channel.Channel[Int32] = @channel.Channel(capacity=1)
   let log : Array[String] = []
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
-    let r = @select.select <| selector => {
-      a.recv_map_to(selector) <| x => {
-        log.push("mapA(\{x})")
-        // re-enter a sibling case of the same select while A is being claimed
-        b.send(99)
-        "A:\{x}"
+    try! ({
+      let r = @select.select <| selector => {
+        a.recv_map_to(selector) <| x => {
+          log.push("mapA(\{x})")
+          // re-enter a sibling case of the same select while A is being claimed
+          b.send(99)
+          "A:\{x}"
+        }
+        b.recv_map_to(selector) <| y => {
+          log.push("mapB(\{y})")
+          "B:\{y}"
+        }
       }
-      b.recv_map_to(selector) <| y => {
-        log.push("mapB(\{y})")
-        "B:\{y}"
-      }
-    }
-    result.set(r)
+      result.set(r)
+    })
   })
   // `selector` is now suspended with readers registered on both `a` and `b`.
   a.send(1)
