@@ -1,8 +1,4 @@
 import {
-  "moonbitlang/core/deque",
-}
-
-import {
   "moonbitlang/core/test",
   "tonyfettes/co/coroutine",
   "tonyfettes/co/channel",

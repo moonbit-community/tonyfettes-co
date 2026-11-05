@@ -17,9 +17,10 @@ pub fn suspend() -> Unit
 pub fn write(Handle, Bytes, offset? : Int, length? : Int) -> Int raise Errno
 
 // Errors
+#derive(@debug.Debug)
 pub(all) suberror Errno {
   Errno(Int)
-} derive(@debug.Debug)
+}
 
 // Types and methods
 type Handle
@@ -27,4 +28,3 @@ type Handle
 // Type aliases
 
 // Traits
-

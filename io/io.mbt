@@ -8,9 +8,19 @@ priv type Io
 extern "c" fn Io::new() -> Io = "moonbit_co_io_create"
 
 ///|
+#derive(Debug)
 pub(all) suberror Errno {
   Errno(Int)
-} derive(Debug)
+}
+
+///|
+// `derive(Debug)` promotes `Debug::to_repr` to a regular method of `Errno`;
+// declare that promotion explicitly instead of relying on the deprecated
+// implicit form. Hidden from the interface — `Debug::to_repr` is the
+// supported call form for formatting an error.
+#deprecated("Use `Debug::to_repr` instead", skip_current_package=true)
+#doc(hidden)
+pub extend Errno with @debug.Debug::{to_repr}
 
 ///|
 #borrow(flags)
@@ -99,12 +109,12 @@ pub fn suspend() -> Unit {
 ///|
 pub fn open(
   path : Bytes,
-  read? : Bool = true,
-  write? : Bool = false,
-  append? : Bool = false,
-  create? : Bool = false,
-  truncate? : Bool = false,
-  exclusive? : Bool = false,
+  read~ : Bool = true,
+  write~ : Bool = false,
+  append~ : Bool = false,
+  create~ : Bool = false,
+  truncate~ : Bool = false,
+  exclusive~ : Bool = false,
 ) -> Handle raise Errno {
   let value = Ref(0UL)
   let error = Ref(0)
@@ -128,8 +138,8 @@ pub fn open(
 pub fn read(
   handle : Handle,
   buffer : FixedArray[Byte],
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
+  offset~ : Int = 0,
+  length~ : Int = buffer.length() - offset,
 ) -> Int raise Errno {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)
@@ -157,8 +167,8 @@ pub fn read(
 pub fn write(
   handle : Handle,
   buffer : Bytes,
-  offset? : Int = 0,
-  length? : Int = buffer.length() - offset,
+  offset~ : Int = 0,
+  length~ : Int = buffer.length() - offset,
 ) -> Int raise Errno {
   guard offset >= 0 && length >= 0 && offset + length <= buffer.length() else {
     raise Errno(EINVAL)

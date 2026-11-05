@@ -45,7 +45,7 @@ async fn bench_chan() -> Unit {
 async fn bench_pingpong() -> Unit {
   let ping : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
   let pong : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
-  @async.with_task_group(group => {
+  @mb_async.with_task_group(group => {
     group.spawn_bg(() => {
       for _ in 0..<PINGPONG_ROUNDS {
         pong.put(ping.get())
@@ -78,7 +78,7 @@ async fn chain(
 async fn bench_chain() -> Unit {
   let ping : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
   let pong : @aqueue.Queue[Int] = @aqueue.Queue(kind=Unbounded)
-  @async.with_task_group(group => {
+  @mb_async.with_task_group(group => {
     group.spawn_bg(() => {
       for _ in 0..<CHAIN_ROUNDS {
         ignore(chain(CHAIN_DEPTH, ping, pong))
@@ -95,7 +95,7 @@ async fn bench_chain() -> Unit {
 /// Spawn a task that runs to completion immediately, N times.
 async fn bench_spawn() -> Unit {
   let mut count = 0
-  @async.with_task_group(group => {
+  @mb_async.with_task_group(group => {
     for _ in 0..<SPAWN_TASKS {
       group.spawn_bg(() => count += 1)
     }
@@ -113,15 +113,15 @@ async fn bench_spawn() -> Unit {
 /// suspension point between the two), so counter == N implies all parked.
 async fn bench_parked() -> Unit {
   let mut parked = 0
-  @async.with_task_group(group => {
+  @mb_async.with_task_group(group => {
     for _ in 0..<PARKED_TASKS {
       group.spawn_bg(no_wait=true, () => {
         parked += 1
-        @async.sleep(3_600_000)
+        @mb_async.sleep(3_600_000)
       })
     }
     while parked < PARKED_TASKS {
-      @async.pause()
+      @mb_async.pause()
     }
   })
 }
