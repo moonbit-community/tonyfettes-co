@@ -10,16 +10,16 @@ pub fn close(Handle) -> Unit raise Errno
 
 pub fn open(Bytes, read? : Bool, write? : Bool, append? : Bool, create? : Bool, truncate? : Bool, exclusive? : Bool) -> Handle raise Errno
 
-pub fn read(Handle, FixedArray[Byte], offset? : Int32, length? : Int32) -> Int32 raise Errno
+pub fn read(Handle, FixedArray[Byte], offset? : Int, length? : Int) -> Int raise Errno
 
 pub fn suspend() -> Unit
 
-pub fn write(Handle, Bytes, offset? : Int32, length? : Int32) -> Int32 raise Errno
+pub fn write(Handle, Bytes, offset? : Int, length? : Int) -> Int raise Errno
 
 // Errors
 #derive(@debug.Debug)
 pub(all) suberror Errno {
-  Errno(Int32)
+  Errno(Int)
 }
 
 // Types and methods

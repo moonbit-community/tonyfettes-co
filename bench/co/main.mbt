@@ -1,20 +1,20 @@
 ///|
-const PINGPONG_ROUNDS : Int32 = 1_000_000
+const PINGPONG_ROUNDS : Int = 1_000_000
 
 ///|
-const CHAN_OPS : Int32 = 1_000_000
+const CHAN_OPS : Int = 1_000_000
 
 ///|
-const CHAIN_ROUNDS : Int32 = 200_000
+const CHAIN_ROUNDS : Int = 200_000
 
 ///|
-const CHAIN_DEPTH : Int32 = 30
+const CHAIN_DEPTH : Int = 30
 
 ///|
-const SPAWN_TASKS : Int32 = 200_000
+const SPAWN_TASKS : Int = 200_000
 
 ///|
-const PARKED_TASKS : Int32 = 100_000
+const PARKED_TASKS : Int = 100_000
 
 ///|
 fn run(name : String, f : () -> Unit) -> Unit {
@@ -27,7 +27,7 @@ fn run(name : String, f : () -> Unit) -> Unit {
 ///|
 /// Channel throughput without any context switch: fill then drain.
 fn bench_chan() -> Unit {
-  let chan : @channel.Channel[Int32] = @channel.Channel::new()
+  let chan : @channel.Channel[Int] = @channel.Channel::new()
   for i in 0..<CHAN_OPS {
     chan.send(i)
   }
@@ -43,8 +43,8 @@ fn bench_chan() -> Unit {
 ///|
 /// Two tasks bouncing a token: 2 context switches + 2 channel ops per round.
 fn bench_pingpong() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel::new()
-  let pong : @channel.Channel[Int32] = @channel.Channel::new()
+  let ping : @channel.Channel[Int] = @channel.Channel::new()
+  let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<PINGPONG_ROUNDS {
       pong.send(ping.recv())
@@ -59,10 +59,10 @@ fn bench_pingpong() -> Unit {
 ///|
 /// Non-tail recursion so every level keeps a real frame.
 fn chain(
-  depth : Int32,
-  ping : @channel.Channel[Int32],
-  pong : @channel.Channel[Int32],
-) -> Int32 {
+  depth : Int,
+  ping : @channel.Channel[Int],
+  pong : @channel.Channel[Int],
+) -> Int {
   if depth == 0 {
     pong.send(ping.recv())
     1
@@ -74,8 +74,8 @@ fn chain(
 ///|
 /// Same as pingpong, but the echo side suspends under a 30-frame call stack.
 fn bench_chain() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel::new()
-  let pong : @channel.Channel[Int32] = @channel.Channel::new()
+  let ping : @channel.Channel[Int] = @channel.Channel::new()
+  let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<CHAIN_ROUNDS {
       ignore(chain(CHAIN_DEPTH, ping, pong))
@@ -115,17 +115,17 @@ fn bench_parked() -> Unit {
 }
 
 ///|
-const SELECT_OPS : Int32 = 1_000_000
+const SELECT_OPS : Int = 1_000_000
 
 ///|
-const SELECT_ROUNDS : Int32 = 1_000_000
+const SELECT_ROUNDS : Int = 1_000_000
 
 ///|
 /// Two-way select where one channel is always ready: measures the per-call
 /// allocation overhead of the select machinery, no context switch.
 fn bench_select() -> Unit {
-  let a : @channel.Channel[Int32] = @channel.Channel::new()
-  let b : @channel.Channel[Int32] = @channel.Channel::new()
+  let a : @channel.Channel[Int] = @channel.Channel::new()
+  let b : @channel.Channel[Int] = @channel.Channel::new()
   let mut sum = 0
   for i in 0..<SELECT_OPS {
     if i % 2 == 0 {
@@ -147,8 +147,8 @@ fn bench_select() -> Unit {
 /// Pingpong where both sides receive through select: exercises the
 /// suspend/deferred-wake path of select.
 fn bench_select_suspend() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel::new()
-  let pong : @channel.Channel[Int32] = @channel.Channel::new()
+  let ping : @channel.Channel[Int] = @channel.Channel::new()
+  let pong : @channel.Channel[Int] = @channel.Channel::new()
   let _ = @coroutine.Coroutine::new(name="echo", () => {
     for _ in 0..<SELECT_ROUNDS {
       pong.send(@select.select(s => ping.recv_map_to(s, x => x)))
