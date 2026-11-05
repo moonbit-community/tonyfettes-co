@@ -336,7 +336,7 @@ fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
     }
   }
   guard self.length < self.buffer.length() else { return false }
-  self.push_buffer(value)
+  self.push_value(value)
   true
 }
 
@@ -347,9 +347,9 @@ fn[T] Channel::try_recv(self : Channel[T]) -> T? {
   // The `is_empty` checks keep the no-waiter case from calling the
   // non-inlined `take_sender`, as in `try_send`.
   if self.length > 0 {
-    let value = self.pop_buffer()
+    let value = self.pop_value()
     if !self.senders.is_empty() && self.take_sender() is Some(next) {
-      self.push_buffer(next)
+      self.push_value(next)
     }
     return Some(value)
   }
@@ -396,7 +396,7 @@ fn[T] Channel::take_sender(self : Channel[T]) -> T? {
 }
 
 ///|
-fn[T] Channel::push_buffer(self : Channel[T], value : T) -> Unit {
+fn[T] Channel::push_value(self : Channel[T], value : T) -> Unit {
   let capacity = self.buffer.length()
   let tail = self.head + self.length
   let index = if tail >= capacity { tail - capacity } else { tail }
@@ -405,7 +405,7 @@ fn[T] Channel::push_buffer(self : Channel[T], value : T) -> Unit {
 }
 
 ///|
-fn[T] Channel::pop_buffer(self : Channel[T]) -> T {
+fn[T] Channel::pop_value(self : Channel[T]) -> T {
   guard self.buffer[self.head] is Some(value) else {
     abort("@tonyfettes/co/channel: empty buffer slot")
   }
