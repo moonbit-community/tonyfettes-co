@@ -5,7 +5,7 @@ import {
 
 import {
   "tonyfettes/co-io" @io,
-  "tonyfettes/co/future",
+  "tonyfettes/co/promise",
   "moonbitlang/core/test",
 } for "test"
 

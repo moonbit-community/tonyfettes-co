@@ -1,0 +1,12 @@
+import {
+  "tonyfettes/co/coroutine",
+}
+
+import {
+  "moonbitlang/core/test",
+  "tonyfettes/co/future",
+} for "test"
+
+options(
+  overrides: [ "tonyfettes/co/runtime/abort" ],
+)
