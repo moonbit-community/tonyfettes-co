@@ -344,55 +344,55 @@ fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
 /// Take the next value without waiting: from the buffer (refilling it from a
 /// parked sender), or straight from a parked sender when unbuffered.
 fn[T] Channel::try_recv(self : Channel[T]) -> T? {
-  // The `is_empty` checks keep the no-waiter case from calling the
-  // non-inlined `take_sender`, as in `try_send`.
-  if self.length > 0 {
-    let value = self.pop_value()
-    if !self.senders.is_empty() && self.take_sender() is Some(next) {
-      self.push_value(next)
-    }
-    return Some(value)
-  }
-  guard !self.senders.is_empty() else { return None }
-  self.take_sender()
-}
-
-///|
-/// Take the value of the first parked sender still sending, waking it.
-fn[T] Channel::take_sender(self : Channel[T]) -> T? {
-  while self.senders.pop_front() is Some(sender) {
-    match sender {
-      Send(coroutine, value, ..) as sender => {
-        sender.delivered = true
-        coroutine.schedule()
-        return Some(value)
-      }
-      SendTo(_, selector) as sender if selector.is_polling() => {
-        self.senders.push_front(sender)
-        return None
-      }
-      SendTo(value, { completed: false, coroutine, .. } as selector) => {
-        selector.completed = true
-        selector.value = Some(())
-        if coroutine is Some(coroutine) {
+  // Redundant with `pop_front`'s own check, but it keeps the no-waiter case
+  // to one comparison, as in `try_send`.
+  let from_sender = if self.senders.is_empty() {
+    None
+  } else {
+    while self.senders.pop_front() is Some(sender) {
+      match sender {
+        Send(coroutine, value, ..) as sender => {
+          sender.delivered = true
           coroutine.schedule()
+          break Some(value)
         }
-        return Some(value)
-      }
-      // A case of a `select` that already completed elsewhere.
-      SendTo(_) => continue
-      SendMapTo(value, claim) as sender =>
-        match claim(None) {
-          Taken => return Some(value)
-          Declined => continue
-          Polling => {
-            self.senders.push_front(sender)
-            return None
+        // The rest of the queue is the polling select's own cases.
+        SendTo(_, selector) as sender if selector.is_polling() => {
+          self.senders.push_front(sender)
+          break None
+        }
+        SendTo(value, { completed: false, coroutine, .. } as selector) => {
+          selector.completed = true
+          selector.value = Some(())
+          if coroutine is Some(coroutine) {
+            coroutine.schedule()
           }
+          break Some(value)
         }
+        // A case of a `select` that already completed elsewhere.
+        SendTo(_) => continue
+        SendMapTo(value, claim) as sender =>
+          match claim(None) {
+            Taken => break Some(value)
+            Declined => continue
+            Polling => {
+              self.senders.push_front(sender)
+              break None
+            }
+          }
+      }
+    } nobreak {
+      None
     }
   }
-  None
+  guard self.length > 0 else { return from_sender }
+  // A parked sender means the buffer was full: its value goes in behind the
+  // one taken out.
+  let value = self.pop_value()
+  if from_sender is Some(next) {
+    self.push_value(next)
+  }
+  Some(value)
 }
 
 ///|
