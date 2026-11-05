@@ -295,8 +295,44 @@ pub fn[T, R] Channel::send_map_to(
 /// Send `value` without waiting: to a parked receiver, or into the buffer.
 /// Returns whether it was sent.
 fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
-  if self.hand_to_receiver(value) {
-    return true
+  // Redundant with `pop_front`'s own check, but `pop_front` is a call into
+  // another package that isn't inlined, while `is_empty` is: checking first
+  // keeps the common no-waiter case free of the call (~4 cycles per op).
+  if !self.receivers.is_empty() {
+    while self.receivers.pop_front() is Some(receiver) {
+      match receiver {
+        Recv(coroutine, ..) as receiver => {
+          receiver.value = Some(value)
+          coroutine.schedule()
+          return true
+        }
+        // The rest of the queue is the polling select's own cases: none of
+        // them may take it, but the buffer still can.
+        RecvTo(selector) as receiver if selector.is_polling() => {
+          self.receivers.push_front(receiver)
+          break
+        }
+        RecvTo({ completed: false, coroutine, .. } as selector) => {
+          selector.completed = true
+          selector.value = Some(value)
+          if coroutine is Some(coroutine) {
+            coroutine.schedule()
+          }
+          return true
+        }
+        RecvMapTo(claim) as receiver =>
+          match claim(Some(value), None) {
+            Taken => return true
+            Declined => continue
+            Polling => {
+              self.receivers.push_front(receiver)
+              break
+            }
+          }
+        // A case of a `select` that already completed elsewhere.
+        _ => continue
+      }
+    }
   }
   guard self.length < self.buffer.length() else { return false }
   self.push_buffer(value)
@@ -304,49 +340,11 @@ fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
 }
 
 ///|
-/// Give `value` directly to a parked receiver, if there is one.
-fn[T] Channel::hand_to_receiver(self : Channel[T], value : T) -> Bool {
-  // Checked first so the common no-waiter case doesn't call `pop_front`.
-  guard !self.receivers.is_empty() else { return false }
-  while self.receivers.pop_front() is Some(receiver) {
-    match receiver {
-      Recv(coroutine, ..) as receiver => {
-        receiver.value = Some(value)
-        coroutine.schedule()
-        return true
-      }
-      RecvTo(selector) as receiver if selector.is_polling() => {
-        self.receivers.push_front(receiver)
-        return false
-      }
-      RecvTo({ completed: false, coroutine, .. } as selector) => {
-        selector.completed = true
-        selector.value = Some(value)
-        if coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        return true
-      }
-      RecvMapTo(claim) as receiver =>
-        match claim(Some(value), None) {
-          Taken => return true
-          Declined => continue
-          Polling => {
-            self.receivers.push_front(receiver)
-            return false
-          }
-        }
-      // A case of a `select` that already completed elsewhere.
-      _ => continue
-    }
-  }
-  false
-}
-
-///|
 /// Take the next value without waiting: from the buffer (refilling it from a
 /// parked sender), or straight from a parked sender when unbuffered.
 fn[T] Channel::try_recv(self : Channel[T]) -> T? {
+  // The `is_empty` checks skip the out-of-line `pop_front` call in the
+  // common no-waiter case, as in `try_send`.
   if self.length > 0 {
     let value = self.pop_buffer()
     if !self.senders.is_empty() && self.take_sender() is Some(next) {
