@@ -105,27 +105,23 @@ test "Bidirectional: main <-> f" {
 
 ///|
 test "Future: wait for result" {
-  let f = @future.Future::new()
-  let _ = @coroutine.Coroutine(() => f.set(21 * 2))
+  let f = @future.Future(() => 21 * 2)
   assert_eq(f.wait(), 42)
 }
 
 ///|
 test "Future: multiple futures" {
-  let a = @future.Future::new()
-  let b = @future.Future::new()
-  let c = @future.Future::new()
-  let _ = @coroutine.Coroutine(() => a.set(10))
-  let _ = @coroutine.Coroutine(() => b.set(20))
-  let _ = @coroutine.Coroutine(() => c.set(30))
+  let a = @future.Future(() => 10)
+  let b = @future.Future(() => 20)
+  let c = @future.Future(() => 30)
   assert_eq(a.wait() + b.wait() + c.wait(), 60)
 }
 
 ///|
 test "Coroutine: spawn and complete" {
-  let result = @future.Future::new()
-  let _ = @coroutine.Coroutine(() => result.set(42))
-  assert_eq(result.wait(), 42)
+  let result = @channel.Channel::new()
+  let _ = @coroutine.Coroutine(() => result.send(42))
+  assert_eq(result.recv(), 42)
 }
 
 ///|
@@ -133,20 +129,15 @@ test "Coroutine: a finished handle stays inert after its stack is reused" {
   // `a` finishes inside the spawn, so its stack goes back to the pool.
   let a = @coroutine.Coroutine(() => ())
   // `b` takes that stack and parks on a gate nobody has opened yet.
-  let gate : @future.Future[Int] = @future.Future::new()
-  let finished : @future.Future[Unit] = @future.Future::new()
-  let mut got = -1
-  let _ = @coroutine.Coroutine(() => {
-    got = gate.wait()
-    finished.set(())
-  })
+  let gate : @channel.Channel[Int] = @channel.Channel::new()
+  let finished : @channel.Channel[Int] = @channel.Channel::new()
+  let _ = @coroutine.Coroutine(() => finished.send(gate.recv()))
   // Scheduling the stale handle must not wake `b`.
   a.schedule()
   // Give the scheduler a round: a woken `b` would run here and find no value.
   let _ = @coroutine.Coroutine(() => ())
-  gate.set(1)
-  finished.wait()
-  assert_eq(got, 1)
+  gate.send(1)
+  assert_eq(finished.recv(), 1)
 }
 
 ///|
@@ -173,7 +164,8 @@ test "Coroutine: FIFO scheduling order" {
 
 ///|
 test "Future: multiple waiters" {
-  let f = @future.Future::new()
+  let gate : @channel.Channel[Int] = @channel.Channel::new()
+  let f = @future.Future(() => gate.recv())
   let results : Array[Int] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine(() => {
@@ -188,7 +180,7 @@ test "Future: multiple waiters" {
     results.push(f.wait())
     done.send(())
   })
-  f.set(99)
+  gate.send(99)
   done.recv()
   done.recv()
   done.recv()
@@ -223,11 +215,10 @@ test "Channel: send wakes one reader" {
 ///|
 test "Future: blocks until ready" {
   let chan = @channel.Channel::new()
-  let f = @future.Future::new()
-  let _ = @coroutine.Coroutine(() => {
+  let f = @future.Future(() => {
     let v = chan.recv()
     println("waiter: chan.recv() -> \{v}")
-    f.set(v * 2)
+    v * 2
   })
   chan.send(5)
   println("main: chan.send(5)")

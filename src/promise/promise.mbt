@@ -13,28 +13,24 @@ struct Promise[T, E] {
 }
 
 ///|
-pub fn[T, E] Promise::new() -> Promise[T, E] {
-  { value: None, error: None, waiter: None, more_waiters: None, }
-}
-
-///|
-/// Settle the promise with `value` and wake every waiter.
+/// Run `f` in a new coroutine and return a promise of its outcome: the value
+/// it returns, or the error it raises.
 ///
-/// Aborts if the promise is already settled.
-pub fn[T, E] Promise::resolve(self : Promise[T, E], value : T) -> Unit {
-  self.check_unsettled()
-  self.value = Some(value)
-  self.wake()
-}
-
-///|
-/// Settle the promise with `error` and wake every waiter.
-///
-/// Aborts if the promise is already settled.
-pub fn[T, E] Promise::reject(self : Promise[T, E], error : E) -> Unit {
-  self.check_unsettled()
-  self.error = Some(error)
-  self.wake()
+/// Like `@coroutine.Coroutine`, `f` starts running immediately and the caller
+/// resumes once it finishes or first suspends.
+pub fn[T, E : Error] Promise::Promise(f : () -> T raise E) -> Promise[T, E] {
+  let promise = { value: None, error: None, waiter: None, more_waiters: None, }
+  ignore(
+    @coroutine.Coroutine(() => {
+      try f() catch {
+        error => promise.error = Some(error)
+      } noraise {
+        value => promise.value = Some(value)
+      }
+      promise.wake()
+    }),
+  )
+  promise
 }
 
 ///|
@@ -62,29 +58,6 @@ pub fn[T, E : Error] Promise::wait(self : Promise[T, E]) -> T raise E {
     raise error
   }
   abort("@tonyfettes/co/promise: wait woke up but the promise is not settled")
-}
-
-///|
-/// Run `f` in a new coroutine and return a promise of its outcome.
-pub fn[T, E : Error] spawn(f : () -> T raise E) -> Promise[T, E] {
-  let promise = Promise::new()
-  ignore(
-    @coroutine.Coroutine(() => {
-      try f() catch {
-        error => promise.reject(error)
-      } noraise {
-        value => promise.resolve(value)
-      }
-    }),
-  )
-  promise
-}
-
-///|
-fn[T, E] Promise::check_unsettled(self : Promise[T, E]) -> Unit {
-  if self.value is Some(_) || self.error is Some(_) {
-    abort("@tonyfettes/co/promise: promise settled twice")
-  }
 }
 
 ///|

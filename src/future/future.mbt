@@ -12,12 +12,18 @@ priv enum Waiter[T] {
 }
 
 ///|
-pub fn[T] Future::new() -> Future[T] {
-  Future::{ value: None, waiters: Array(), }
+/// Run `f` in a new coroutine and return a future of its result.
+///
+/// Like `@coroutine.Coroutine`, `f` starts running immediately and the caller
+/// resumes once it finishes or first suspends.
+pub fn[T] Future::Future(f : () -> T) -> Future[T] {
+  let future = Future::{ value: None, waiters: [], }
+  ignore(@coroutine.Coroutine(() => future.set(f())))
+  future
 }
 
 ///|
-pub fn[T] Future::set(self : Future[T], value : T) -> Unit {
+fn[T] Future::set(self : Future[T], value : T) -> Unit {
   self.value = Some(value)
   for waiter in self.waiters {
     match waiter {

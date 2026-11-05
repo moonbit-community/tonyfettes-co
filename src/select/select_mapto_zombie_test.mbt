@@ -5,14 +5,11 @@
 test "recv_map_to zombie reader must not consume later sends" {
   let a : @channel.Channel[Int] = @channel.Channel::new()
   let b : @channel.Channel[Int] = @channel.Channel::new()
-  let result = @future.Future::new()
-  let _ = @coroutine.Coroutine(() => {
-    result.set(
-      @select.select <| selector => {
-        a.recv_map_to(selector) <| x => { x }
-        b.recv_map_to(selector) <| y => { y }
-      },
-    )
+  let result = @future.Future(() => {
+    @select.select <| selector => {
+      a.recv_map_to(selector) <| x => { x }
+      b.recv_map_to(selector) <| y => { y }
+    }
   })
   // selector is suspended with readers registered on both channels.
   a.send(1)

@@ -7,9 +7,8 @@ test "select: mapper re-entering a sibling case must not consume it" {
   let a : @channel.Channel[Int] = @channel.Channel::new()
   let b : @channel.Channel[Int] = @channel.Channel::new()
   let log : Array[String] = []
-  let result = @future.Future::new()
-  let _ = @coroutine.Coroutine(() => {
-    let r = @select.select <| selector => {
+  let result = @future.Future(() => {
+    @select.select <| selector => {
       a.recv_map_to(selector) <| x => {
         log.push("mapA(\{x})")
         // re-enter a sibling case of the same select while A is being claimed
@@ -21,7 +20,6 @@ test "select: mapper re-entering a sibling case must not consume it" {
         "B:\{y}"
       }
     }
-    result.set(r)
   })
   // `selector` is now suspended with readers registered on both `a` and `b`.
   a.send(1)

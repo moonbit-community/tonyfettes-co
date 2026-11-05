@@ -1,8 +1,15 @@
 ///|
+/// A future nobody has set yet; these tests settle it by hand with `set` to
+/// observe exactly what happens around it.
+fn[T] pending() -> Future[T] {
+  { value: None, waiters: [], }
+}
+
+///|
 test "future: select ready path takes the first registered case" {
-  let int_fut : @future.Future[Int] = @future.Future::new()
+  let int_fut : Future[Int32] = pending()
   int_fut.set(3)
-  let str_fut : @future.Future[String] = @future.Future::new()
+  let str_fut : Future[String] = pending()
   str_fut.set("string")
   inspect(
     @select.select <| selector => {
@@ -15,9 +22,9 @@ test "future: select ready path takes the first registered case" {
 
 ///|
 test "future: select wakes when a pending future is set" {
-  let a : @future.Future[Int] = @future.Future::new()
-  let b : @future.Future[Int] = @future.Future::new()
-  let result = @future.Future::new()
+  let a : Future[Int32] = pending()
+  let b : Future[Int32] = pending()
+  let result = pending()
   let _ = @coroutine.Coroutine(() => {
     result.set(
       @select.select <| selector => {
@@ -38,9 +45,9 @@ test "future: select wakes when a pending future is set" {
 // Wake-path mapper must run in the selecting coroutine after it resumes,
 // never on the setter's stack during `set` (mirrors the channel defer test).
 test "future: wake-path mapper is deferred past set()" {
-  let a : @future.Future[Int] = @future.Future::new()
+  let a : Future[Int32] = pending()
   let order : Array[String] = []
-  let result = @future.Future::new()
+  let result = pending()
   let _ = @coroutine.Coroutine(() => {
     let selector = @select.Selector()
     a.wait_map_to(selector) <| x => {
@@ -61,9 +68,9 @@ test "future: wake-path mapper is deferred past set()" {
 // is eventually set; the completed guard must make it a no-op instead of
 // ghost-scheduling the (already finished) selecting coroutine.
 test "future: leftover wait_map_to waiter is inert after select completes" {
-  let a : @future.Future[Int] = @future.Future::new()
-  let b : @future.Future[Int] = @future.Future::new()
-  let result = @future.Future::new()
+  let a : Future[Int32] = pending()
+  let b : Future[Int32] = pending()
+  let result = pending()
   let _ = @coroutine.Coroutine(() => {
     result.set(
       @select.select <| selector => {

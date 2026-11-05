@@ -3,10 +3,6 @@ import {
   "tonyfettes/co/coroutine",
 }
 
-import {
-  "tonyfettes/co/channel",
-} for "wbtest"
-
 options(
   overrides: [ "tonyfettes/co/runtime/abort" ],
 )

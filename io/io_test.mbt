@@ -29,47 +29,15 @@ test "concurrent IO" {
   let src = b"concurrent test"
   let _ = @io.write(fd, src)
   @io.close(fd)
-  let f1 = @promise.Promise::new()
-  let f2 = @promise.Promise::new()
   let buf1 = FixedArray::make(64, b'\x00')
   let buf2 = FixedArray::make(64, b'\x00')
-  let _ = @coroutine.Coroutine(() => {
-    let fd = @io.open(path) catch {
-      error => {
-        f1.reject(error)
-        return
-      }
-    }
-    try @io.read(fd, buf1) catch {
-      error => {
-        @io.close(fd) catch {
-          _ => ()
-        }
-        f1.reject(error)
-        return
-      }
-    } noraise {
-      n => f1.resolve(n)
-    }
-  })
-  let _ = @coroutine.Coroutine(() => {
-    let fd = @io.open(path) catch {
-      error => {
-        f2.reject(error)
-        return
-      }
-    }
-    try @io.read(fd, buf2) catch {
-      error => {
-        @io.close(fd) catch {
-          _ => ()
-        }
-        f2.reject(error)
-      }
-    } noraise {
-      n => f2.resolve(n)
-    }
-  })
+  let read_into = buf => {
+    let fd = @io.open(path)
+    defer (@io.close(fd) catch { _ => () })
+    @io.read(fd, buf)
+  }
+  let f1 = @promise.Promise(() => read_into(buf1))
+  let f2 = @promise.Promise(() => read_into(buf2))
   let n1 = f1.wait()
   let n2 = f2.wait()
   assert_eq(n1, src.length())

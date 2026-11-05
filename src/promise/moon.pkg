@@ -4,7 +4,7 @@ import {
 
 import {
   "moonbitlang/core/test",
-  "tonyfettes/co/future",
+  "tonyfettes/co/channel",
 } for "test"
 
 options(
