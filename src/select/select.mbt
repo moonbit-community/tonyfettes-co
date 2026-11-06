@@ -3,22 +3,27 @@ pub(all) struct Selector[T] {
   mut coroutine : @coroutine.Coroutine?
   mut completed : Bool
   mut value : T?
-  // Computes the completed case's outcome once `wait` resumes: applies its
-  // mapper, or raises the error it failed with (e.g. its channel's close
-  // error).
+  // Applies the completed case's mapper once `wait` resumes, so it runs on the
+  // waiting coroutine.
   mut thunk : (() -> T raise)?
+  // The error the completed case failed with (e.g. its channel's close error,
+  // or its mapper's error when the mapper ran eagerly).
+  mut error : Error?
 }
 
 ///|
 pub fn[T] Selector::Selector() -> Selector[T] {
-  { coroutine: None, completed: false, value: None, thunk: None, }
+  { coroutine: None, completed: false, value: None, thunk: None, error: None, }
 }
 
 ///|
 /// The outcome of the completed case: its value, or the error it failed with.
-fn[T] Selector::outcome(self : Selector[T]) -> T? raise {
+fn[T] Selector::get(self : Selector[T]) -> T? raise {
   if self.value is Some(value) {
     return Some(value)
+  }
+  if self.error is Some(error) {
+    raise error
   }
   if self.thunk is Some(thunk) {
     let value = thunk()
@@ -32,12 +37,12 @@ fn[T] Selector::outcome(self : Selector[T]) -> T? raise {
 /// Wait for the first case to complete and return its value, or raise the
 /// error it failed with (for a channel case, the channel's close error).
 pub fn[T] Selector::wait(self : Selector[T]) -> T raise {
-  if self.outcome() is Some(value) {
+  if self.get() is Some(value) {
     return value
   }
   self.coroutine = Some(@coroutine.current())
   @coroutine.suspend()
-  if self.outcome() is Some(value) {
+  if self.get() is Some(value) {
     return value
   }
   abort("@tonyfettes/co/select: Selector woke up without value")

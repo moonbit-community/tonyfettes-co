@@ -12,21 +12,21 @@ struct Channel[T] {
 priv enum Receiver[T] {
   Recv(@coroutine.Coroutine, mut value~ : T?)
   RecvTo(@select.Selector[T])
-  RecvMapTo((T?, Error?) -> Claim)
+  RecvMapTo((T?, Error?) -> Outcome)
 }
 
 ///|
-priv enum Claim {
-  Taken
-  Declined
-  Polling
+priv enum Outcome {
+  Won
+  Lost
+  Pending
 }
 
 ///|
 priv enum Sender[T] {
   Send(@coroutine.Coroutine, T, mut sent~ : Bool)
   SendTo(T, @select.Selector[Unit])
-  SendMapTo(T, (Error?) -> Claim)
+  SendMapTo(T, (Error?) -> Outcome)
 }
 
 ///|
@@ -95,7 +95,7 @@ pub fn[T] Channel::close(self : Channel[T], error : Error) -> Unit {
       Recv(coroutine, ..) => coroutine.schedule()
       RecvTo({ completed: false, coroutine, .. } as selector) => {
         selector.completed = true
-        selector.thunk = Some(() => raise error)
+        selector.error = Some(error)
         if coroutine is Some(coroutine) {
           coroutine.schedule()
         }
@@ -109,12 +109,12 @@ pub fn[T] Channel::close(self : Channel[T], error : Error) -> Unit {
       Send(coroutine, _, ..) => coroutine.schedule()
       SendTo(_, { completed: false, coroutine, .. } as selector) => {
         selector.completed = true
-        selector.thunk = Some(() => raise error)
+        selector.error = Some(error)
         if coroutine is Some(coroutine) {
           coroutine.schedule()
         }
       }
-      SendMapTo(_, claim) => ignore(claim(Some(error)))
+      SendMapTo(_, func) => ignore(func(Some(error)))
       _ => continue
     }
   }
@@ -133,7 +133,7 @@ pub fn[T] Channel::recv_to(
   }
   if self.closed is Some(error) {
     selector.completed = true
-    selector.thunk = Some(() => raise error)
+    selector.error = Some(error)
     return
   }
   self.receivers.push_back(RecvTo(selector))
@@ -148,33 +148,35 @@ pub fn[T, R] Channel::recv_map_to(
   guard !selector.completed else { return }
   if self.try_recv() is Some(value) {
     selector.completed = true
-    selector.value = Some(f(value)) catch {
-      error => {
-        selector.thunk = Some(() => raise error)
-        None
-      }
+    try f(value) catch {
+      error => selector.error = Some(error)
+    } noraise {
+      value => selector.value = Some(value)
     }
     return
   }
-  if self.closed is Some(error) {
+  if self.closed is Some(_) {
     selector.completed = true
-    selector.thunk = Some(() => raise error)
+    selector.error = self.closed
     return
   }
   self.receivers.push_back(
     RecvMapTo((value, error) => {
-      guard !selector.completed else { Declined }
-      guard error is Some(_) || selector.coroutine is Some(_) else { Polling }
+      guard !selector.completed else { Lost }
+      match (value, selector.coroutine) {
+        (Some(_), None) => return Pending
+        (Some(value), Some(coroutine)) => {
+          coroutine.schedule()
+          selector.thunk = Some(() => f(value))
+        }
+        (None, Some(coroutine)) => {
+          coroutine.schedule()
+          selector.error = error
+        }
+        (None, None) => selector.error = error
+      }
       selector.completed = true
-      if selector.coroutine is Some(coroutine) {
-        coroutine.schedule()
-      }
-      if value is Some(value) {
-        selector.thunk = Some(() => f(value))
-      } else if error is Some(error) {
-        selector.thunk = Some(() => raise error)
-      }
-      Taken
+      Won
     }),
   )
 }
@@ -188,7 +190,7 @@ pub fn[T] Channel::send_to(
   guard !selector.completed else { return }
   if self.closed is Some(error) {
     selector.completed = true
-    selector.thunk = Some(() => raise error)
+    selector.error = Some(error)
     return
   }
   if self.try_send(value) {
@@ -209,14 +211,14 @@ pub fn[T, R] Channel::send_map_to(
   guard !selector.completed else { return }
   if self.closed is Some(error) {
     selector.completed = true
-    selector.thunk = Some(() => raise error)
+    selector.error = Some(error)
     return
   }
   if self.try_send(value) {
     selector.completed = true
     selector.value = Some(f()) catch {
       error => {
-        selector.thunk = Some(() => raise error)
+        selector.error = Some(error)
         None
       }
     }
@@ -224,18 +226,21 @@ pub fn[T, R] Channel::send_map_to(
   }
   self.senders.push_back(
     SendMapTo(value, error => {
-      guard !selector.completed else { Declined }
-      guard error is Some(_) || selector.coroutine is Some(_) else { Polling }
+      guard !selector.completed else { Lost }
+      match (error, selector.coroutine) {
+        (None, None) => return Pending
+        (None, Some(coroutine)) => {
+          coroutine.schedule()
+          selector.thunk = Some(f)
+        }
+        (Some(_), Some(coroutine)) => {
+          coroutine.schedule()
+          selector.error = error
+        }
+        (Some(_), None) => selector.error = error
+      }
       selector.completed = true
-      if selector.coroutine is Some(coroutine) {
-        coroutine.schedule()
-      }
-      if error is Some(error) {
-        selector.thunk = Some(() => raise error)
-      } else {
-        selector.thunk = Some(f)
-      }
-      Taken
+      Won
     }),
   )
 }
@@ -261,11 +266,11 @@ fn[T] Channel::try_send(self : Channel[T], value : T) -> Bool {
         }
         return true
       }
-      RecvMapTo(claim) as receiver =>
-        match claim(Some(value), None) {
-          Taken => return true
-          Declined => continue
-          Polling => {
+      RecvMapTo(func) as receiver =>
+        match func(Some(value), None) {
+          Won => return true
+          Lost => continue
+          Pending => {
             self.receivers.push_front(receiver)
             break
           }
@@ -302,9 +307,9 @@ fn[T] Channel::try_recv(self : Channel[T]) -> T? {
       SendTo(_) => continue
       SendMapTo(value, claim) as sender =>
         match claim(None) {
-          Taken => break Some(value)
-          Declined => continue
-          Polling => {
+          Won => break Some(value)
+          Lost => continue
+          Pending => {
             self.senders.push_front(sender)
             break None
           }
