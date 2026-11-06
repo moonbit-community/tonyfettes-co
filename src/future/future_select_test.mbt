@@ -1,6 +1,6 @@
 ///|
 test "future: select ready path takes the first registered case" {
-  let int_fut : @future.Future[Int] = @future.Future::new()
+  let int_fut : @future.Future[Int32] = @future.Future::new()
   int_fut.set(3)
   let str_fut : @future.Future[String] = @future.Future::new()
   str_fut.set("string")
@@ -15,8 +15,8 @@ test "future: select ready path takes the first registered case" {
 
 ///|
 test "future: select wakes when a pending future is set" {
-  let a : @future.Future[Int] = @future.Future::new()
-  let b : @future.Future[Int] = @future.Future::new()
+  let a : @future.Future[Int32] = @future.Future::new()
+  let b : @future.Future[Int32] = @future.Future::new()
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
     result.set(
@@ -38,7 +38,7 @@ test "future: select wakes when a pending future is set" {
 // Wake-path mapper must run in the selecting coroutine after it resumes,
 // never on the setter's stack during `set` (mirrors the channel defer test).
 test "future: wake-path mapper is deferred past set()" {
-  let a : @future.Future[Int] = @future.Future::new()
+  let a : @future.Future[Int32] = @future.Future::new()
   let order : Array[String] = []
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
@@ -61,8 +61,8 @@ test "future: wake-path mapper is deferred past set()" {
 // is eventually set; the completed guard must make it a no-op instead of
 // ghost-scheduling the (already finished) selecting coroutine.
 test "future: leftover wait_map_to waiter is inert after select completes" {
-  let a : @future.Future[Int] = @future.Future::new()
-  let b : @future.Future[Int] = @future.Future::new()
+  let a : @future.Future[Int32] = @future.Future::new()
+  let b : @future.Future[Int32] = @future.Future::new()
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
     result.set(
