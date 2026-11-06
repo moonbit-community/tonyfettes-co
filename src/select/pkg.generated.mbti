@@ -18,7 +18,6 @@ pub(all) struct Selector[T] {
   mut thunk : (() -> T raise)?
 }
 pub fn[T] Selector::Selector() -> Self[T]
-pub fn[T] Selector::is_polling(Self[T]) -> Bool
 pub fn[T] Selector::wait(Self[T]) -> T raise
 
 // Type aliases
