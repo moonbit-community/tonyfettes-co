@@ -49,7 +49,7 @@ test "Bidirectional: f <-> g" {
 
 ///|
 test "Channel: values follow FIFO" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let done = @channel.Channel::new()
   chan.send(1)
   chan.send(2)
@@ -67,7 +67,7 @@ test "Channel: values follow FIFO" {
 
 ///|
 test "Channel: readers follow FIFO" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let done : @channel.Channel[Unit] = @channel.Channel::new()
   let results = []
   let _ = @coroutine.Coroutine(() => {
@@ -133,7 +133,7 @@ test "Coroutine: a finished handle stays inert after its stack is reused" {
   // `a` finishes inside the spawn, so its stack goes back to the pool.
   let a = @coroutine.Coroutine(() => ())
   // `b` takes that stack and parks on a gate nobody has opened yet.
-  let gate : @future.Future[Int] = @future.Future::new()
+  let gate : @future.Future[Int32] = @future.Future::new()
   let finished : @future.Future[Unit] = @future.Future::new()
   let mut got = -1
   let _ = @coroutine.Coroutine(() => {
@@ -151,7 +151,7 @@ test "Coroutine: a finished handle stays inert after its stack is reused" {
 
 ///|
 test "Coroutine: FIFO scheduling order" {
-  let order : Array[Int] = []
+  let order : Array[Int32] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine(() => {
     order.push(1)
@@ -174,7 +174,7 @@ test "Coroutine: FIFO scheduling order" {
 ///|
 test "Future: multiple waiters" {
   let f = @future.Future::new()
-  let results : Array[Int] = []
+  let results : Array[Int32] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine(() => {
     results.push(f.wait())
@@ -197,7 +197,7 @@ test "Future: multiple waiters" {
 
 ///|
 test "Channel: send wakes one reader" {
-  let chan : @channel.Channel[Int] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel::new()
   let woken : Array[String] = []
   let done = @channel.Channel::new()
   let _ = @coroutine.Coroutine(() => {

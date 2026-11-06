@@ -110,7 +110,7 @@ fn Scheduler::allocate(
 }
 
 ///|
-const RECYCLED_COROUTINE_LIMIT : Int = 16
+const RECYCLED_COROUTINE_LIMIT : Int32 = 16
 
 ///|
 fn Scheduler::recycle(self : Scheduler, coroutine : Coroutine) -> Unit {
