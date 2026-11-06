@@ -3,15 +3,17 @@ using @test {assert_eq}
 
 ///|
 test "Channel" {
-  let chan = @channel.Channel::new()
-  let done = @channel.Channel::new()
+  let chan = @channel.Channel()
+  let done = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    println("f: 1")
-    println("f: chan.recv() -> \{chan.recv()}")
-    println("f: 2")
-    println("f: chan.recv() -> \{chan.recv()}")
-    println("f: 3")
-    done.send(())
+    try! ({
+      println("f: 1")
+      println("f: chan.recv() -> \{chan.recv()}")
+      println("f: 2")
+      println("f: chan.recv() -> \{chan.recv()}")
+      println("f: 3")
+      done.send(())
+    })
   })
   println("main: before chan.send(3)")
   chan.send(3)
@@ -24,24 +26,28 @@ test "Channel" {
 
 ///|
 test "Bidirectional: f <-> g" {
-  let forward = @channel.Channel::new()
-  let backward = @channel.Channel::new()
-  let done = @channel.Channel::new()
+  let forward = @channel.Channel()
+  let backward = @channel.Channel()
+  let done = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    println("f: before forward.send(1)")
-    forward.send(1)
-    println("f: after forward.send(1)")
-    println("f: before backward.recv()")
-    println("f: after backward.recv() -> \{backward.recv()}")
-    done.send(())
+    try! ({
+      println("f: before forward.send(1)")
+      forward.send(1)
+      println("f: after forward.send(1)")
+      println("f: before backward.recv()")
+      println("f: after backward.recv() -> \{backward.recv()}")
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    println("g: before forward.recv()")
-    println("g: after forward.recv() -> \{forward.recv()}")
-    println("g: before backward.send(2)")
-    backward.send(2)
-    println("g: after backward.send(2)")
-    done.send(())
+    try! ({
+      println("g: before forward.recv()")
+      println("g: after forward.recv() -> \{forward.recv()}")
+      println("g: before backward.send(2)")
+      backward.send(2)
+      println("g: after backward.send(2)")
+      done.send(())
+    })
   })
   done.recv()
   done.recv()
@@ -49,17 +55,20 @@ test "Bidirectional: f <-> g" {
 
 ///|
 test "Channel: values follow FIFO" {
-  let chan : @channel.Channel[Int32] = @channel.Channel::new()
-  let done = @channel.Channel::new()
+  // Buffered: the values are sent before any receiver exists.
+  let chan : @channel.Channel[Int32] = @channel.Channel(capacity=3)
+  let done = @channel.Channel()
   chan.send(1)
   chan.send(2)
   chan.send(3)
   let results = []
   let _ = @coroutine.Coroutine(() => {
-    results.push(chan.recv())
-    results.push(chan.recv())
-    results.push(chan.recv())
-    done.send(())
+    try! ({
+      results.push(chan.recv())
+      results.push(chan.recv())
+      results.push(chan.recv())
+      done.send(())
+    })
   })
   done.recv()
   assert_eq(results, [1, 2, 3])
@@ -67,16 +76,20 @@ test "Channel: values follow FIFO" {
 
 ///|
 test "Channel: readers follow FIFO" {
-  let chan : @channel.Channel[Int32] = @channel.Channel::new()
-  let done : @channel.Channel[Unit] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel()
+  let done : @channel.Channel[Unit] = @channel.Channel()
   let results = []
   let _ = @coroutine.Coroutine(() => {
-    results.push(("reader1", chan.recv()))
-    done.send(())
+    try! ({
+      results.push(("reader1", chan.recv()))
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    results.push(("reader2", chan.recv()))
-    done.send(())
+    try! ({
+      results.push(("reader2", chan.recv()))
+      done.send(())
+    })
   })
   chan.send(10)
   chan.send(20)
@@ -87,14 +100,16 @@ test "Channel: readers follow FIFO" {
 
 ///|
 test "Bidirectional: main <-> f" {
-  let forward = @channel.Channel::new()
-  let backward = @channel.Channel::new()
+  let forward = @channel.Channel()
+  let backward = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    println("f: before forward.send(1)")
-    forward.send(1)
-    println("f: after forward.send(1)")
-    println("f: before backward.recv()")
-    println("f: after backward.recv() -> \{backward.recv()}")
+    try! ({
+      println("f: before forward.send(1)")
+      forward.send(1)
+      println("f: after forward.send(1)")
+      println("f: before backward.recv()")
+      println("f: after backward.recv() -> \{backward.recv()}")
+    })
   })
   println("main: before forward.recv()")
   println("main: after forward.recv() -> \{forward.recv()}")
@@ -152,18 +167,24 @@ test "Coroutine: a finished handle stays inert after its stack is reused" {
 ///|
 test "Coroutine: FIFO scheduling order" {
   let order : Array[Int32] = []
-  let done = @channel.Channel::new()
+  let done = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    order.push(1)
-    done.send(())
+    try! ({
+      order.push(1)
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    order.push(2)
-    done.send(())
+    try! ({
+      order.push(2)
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    order.push(3)
-    done.send(())
+    try! ({
+      order.push(3)
+      done.send(())
+    })
   })
   done.recv()
   done.recv()
@@ -175,18 +196,24 @@ test "Coroutine: FIFO scheduling order" {
 test "Future: multiple waiters" {
   let f = @future.Future::new()
   let results : Array[Int32] = []
-  let done = @channel.Channel::new()
+  let done = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    results.push(f.wait())
-    done.send(())
+    try! ({
+      results.push(f.wait())
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    results.push(f.wait())
-    done.send(())
+    try! ({
+      results.push(f.wait())
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    results.push(f.wait())
-    done.send(())
+    try! ({
+      results.push(f.wait())
+      done.send(())
+    })
   })
   f.set(99)
   done.recv()
@@ -197,18 +224,22 @@ test "Future: multiple waiters" {
 
 ///|
 test "Channel: send wakes one reader" {
-  let chan : @channel.Channel[Int32] = @channel.Channel::new()
+  let chan : @channel.Channel[Int32] = @channel.Channel()
   let woken : Array[String] = []
-  let done = @channel.Channel::new()
+  let done = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    let _ = chan.recv()
-    woken.push("r1")
-    done.send(())
+    try! ({
+      let _ = chan.recv()
+      woken.push("r1")
+      done.send(())
+    })
   })
   let _ = @coroutine.Coroutine(() => {
-    let _ = chan.recv()
-    woken.push("r2")
-    done.send(())
+    try! ({
+      let _ = chan.recv()
+      woken.push("r2")
+      done.send(())
+    })
   })
   // Send one value — only one reader should wake
   chan.send(1)
@@ -222,12 +253,14 @@ test "Channel: send wakes one reader" {
 
 ///|
 test "Future: blocks until ready" {
-  let chan = @channel.Channel::new()
+  let chan = @channel.Channel()
   let f = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
-    let v = chan.recv()
-    println("waiter: chan.recv() -> \{v}")
-    f.set(v * 2)
+    try! ({
+      let v = chan.recv()
+      println("waiter: chan.recv() -> \{v}")
+      f.set(v * 2)
+    })
   })
   chan.send(5)
   println("main: chan.send(5)")

@@ -1,0 +1,19 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/co/internal/ring"
+
+// Values
+
+// Errors
+
+// Types and methods
+type Ring[T]
+pub fn[T] Ring::Ring() -> Self[T]
+pub fn[T] Ring::is_empty(Self[T]) -> Bool
+pub fn[T] Ring::length(Self[T]) -> Int32
+pub fn[T] Ring::pop_front(Self[T]) -> T?
+pub fn[T] Ring::push_back(Self[T], T) -> Unit
+pub fn[T] Ring::push_front(Self[T], T) -> Unit
+
+// Type aliases
+
+// Traits

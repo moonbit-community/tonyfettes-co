@@ -1,8 +1,12 @@
 import {
-  "moonbitlang/core/deque",
   "tonyfettes/co/coroutine",
+  "tonyfettes/co/internal/ring",
   "tonyfettes/co/select",
 }
+
+import {
+  "moonbitlang/core/test",
+} for "test"
 
 options(
   overrides: [ "tonyfettes/co/runtime/abort" ],

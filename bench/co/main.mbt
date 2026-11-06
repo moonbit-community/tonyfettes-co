@@ -17,7 +17,7 @@ const SPAWN_TASKS : Int32 = 200_000
 const PARKED_TASKS : Int32 = 100_000
 
 ///|
-fn run(name : String, f : () -> Unit) -> Unit {
+fn run(name : String, f : () -> Unit raise) -> Unit raise {
   let ts = @bench.monotonic_clock_start()
   f()
   let us = @bench.monotonic_clock_end(ts)
@@ -25,9 +25,10 @@ fn run(name : String, f : () -> Unit) -> Unit {
 }
 
 ///|
-/// Channel throughput without any context switch: fill then drain.
-fn bench_chan() -> Unit {
-  let chan : @channel.Channel[Int32] = @channel.Channel::new()
+/// Channel throughput without any context switch: fill a buffer large enough
+/// for every value, then drain it.
+fn bench_chan() -> Unit raise {
+  let chan : @channel.Channel[Int32] = @channel.Channel(capacity=CHAN_OPS)
   for i in 0..<CHAN_OPS {
     chan.send(i)
   }
@@ -42,13 +43,13 @@ fn bench_chan() -> Unit {
 
 ///|
 /// Two tasks bouncing a token: 2 context switches + 2 channel ops per round.
-fn bench_pingpong() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel::new()
-  let pong : @channel.Channel[Int32] = @channel.Channel::new()
+fn bench_pingpong() -> Unit raise {
+  let ping : @channel.Channel[Int32] = @channel.Channel()
+  let pong : @channel.Channel[Int32] = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    for _ in 0..<PINGPONG_ROUNDS {
+    try! (for _ in 0..<PINGPONG_ROUNDS {
       pong.send(ping.recv())
-    }
+    })
   })
   for _ in 0..<PINGPONG_ROUNDS {
     ping.send(1)
@@ -62,7 +63,7 @@ fn chain(
   depth : Int32,
   ping : @channel.Channel[Int32],
   pong : @channel.Channel[Int32],
-) -> Int32 {
+) -> Int32 raise {
   if depth == 0 {
     pong.send(ping.recv())
     1
@@ -73,13 +74,13 @@ fn chain(
 
 ///|
 /// Same as pingpong, but the echo side suspends under a 30-frame call stack.
-fn bench_chain() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel::new()
-  let pong : @channel.Channel[Int32] = @channel.Channel::new()
+fn bench_chain() -> Unit raise {
+  let ping : @channel.Channel[Int32] = @channel.Channel()
+  let pong : @channel.Channel[Int32] = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    for _ in 0..<CHAIN_ROUNDS {
+    try! (for _ in 0..<CHAIN_ROUNDS {
       ignore(chain(CHAIN_DEPTH, ping, pong))
-    }
+    })
   })
   for _ in 0..<CHAIN_ROUNDS {
     ping.send(1)
@@ -122,10 +123,11 @@ const SELECT_ROUNDS : Int32 = 1_000_000
 
 ///|
 /// Two-way select where one channel is always ready: measures the per-call
-/// allocation overhead of the select machinery, no context switch.
-fn bench_select() -> Unit {
-  let a : @channel.Channel[Int32] = @channel.Channel::new()
-  let b : @channel.Channel[Int32] = @channel.Channel::new()
+/// allocation overhead of the select machinery, no context switch. Each value
+/// is buffered before the select, so the channels need room for one.
+fn bench_select() -> Unit raise {
+  let a : @channel.Channel[Int32] = @channel.Channel(capacity=1)
+  let b : @channel.Channel[Int32] = @channel.Channel(capacity=1)
   let mut sum = 0
   for i in 0..<SELECT_OPS {
     if i % 2 == 0 {
@@ -146,13 +148,13 @@ fn bench_select() -> Unit {
 ///|
 /// Pingpong where both sides receive through select: exercises the
 /// suspend/deferred-wake path of select.
-fn bench_select_suspend() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel::new()
-  let pong : @channel.Channel[Int32] = @channel.Channel::new()
+fn bench_select_suspend() -> Unit raise {
+  let ping : @channel.Channel[Int32] = @channel.Channel()
+  let pong : @channel.Channel[Int32] = @channel.Channel()
   let _ = @coroutine.Coroutine(() => {
-    for _ in 0..<SELECT_ROUNDS {
+    try! (for _ in 0..<SELECT_ROUNDS {
       pong.send(@select.select(s => ping.recv_map_to(s, x => x)))
-    }
+    })
   })
   for _ in 0..<SELECT_ROUNDS {
     ping.send(1)
@@ -164,17 +166,17 @@ fn bench_select_suspend() -> Unit {
 fn main {
   let args = @env.args()
   let scenario = if args.length() > 0 { args[args.length() - 1] } else { "" }
-  match scenario {
+  try! (match scenario {
     "chan" => run("chan", bench_chan)
     "pingpong" => run("pingpong", bench_pingpong)
     "chain" => run("chain", bench_chain)
-    "spawn" => run("spawn", bench_spawn)
-    "parked" => run("parked", bench_parked)
+    "spawn" => run("spawn", () => bench_spawn())
+    "parked" => run("parked", () => bench_parked())
     "select" => run("select", bench_select)
     "select_suspend" => run("select_suspend", bench_select_suspend)
     _ =>
       println(
         "usage: co_bench <chan|pingpong|chain|spawn|parked|select|select_suspend>",
       )
-  }
+  })
 }

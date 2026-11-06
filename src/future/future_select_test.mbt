@@ -19,7 +19,7 @@ test "future: select wakes when a pending future is set" {
   let b : @future.Future[Int32] = @future.Future::new()
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
-    result.set(
+    try! result.set(
       @select.select <| selector => {
         a.wait_to(selector)
         b.wait_to(selector)
@@ -42,12 +42,14 @@ test "future: wake-path mapper is deferred past set()" {
   let order : Array[String] = []
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
-    let selector = @select.Selector()
-    a.wait_map_to(selector) <| x => {
-      order.push("mapper")
-      x
-    }
-    result.set(selector.wait())
+    try! ({
+      let selector = @select.Selector()
+      a.wait_map_to(selector) <| x => {
+        order.push("mapper")
+        x
+      }
+      result.set(selector.wait())
+    })
   })
   order.push("set:before")
   a.set(1)
@@ -65,7 +67,7 @@ test "future: leftover wait_map_to waiter is inert after select completes" {
   let b : @future.Future[Int32] = @future.Future::new()
   let result = @future.Future::new()
   let _ = @coroutine.Coroutine(() => {
-    result.set(
+    try! result.set(
       @select.select <| selector => {
         a.wait_map_to(selector) <| x => { x }
         b.wait_map_to(selector) <| y => { y }
