@@ -1,8 +1,8 @@
 ///|
 test "select" {
-  let int_chan = @channel.Channel::new()
+  let int_chan = @channel.Channel(1)
   int_chan.send(3)
-  let str_chan = @channel.Channel::new()
+  let str_chan = @channel.Channel(1)
   str_chan.send("string")
   inspect(
     @select.select <| selector => {

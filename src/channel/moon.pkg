@@ -4,6 +4,11 @@ import {
   "tonyfettes/co/select",
 }
 
+import {
+  "moonbitlang/core/test",
+  "tonyfettes/co/future",
+} for "test"
+
 options(
   overrides: [ "tonyfettes/co/runtime/abort" ],
 )
