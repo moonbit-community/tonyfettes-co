@@ -13,11 +13,9 @@ import {
 type Channel[T]
 pub fn[T] Channel::Channel(Int32) -> Self[T]
 pub fn[T] Channel::recv(Self[T]) -> T
-pub fn[T, R] Channel::recv_map_to(Self[T], @select.Selector[R], (T) -> R) -> Unit
-pub fn[T] Channel::recv_to(Self[T], @select.Selector[T]) -> Unit
+pub fn[T] Channel::recv_to(Self[T], @select.Selector) -> Unit
 pub fn[T] Channel::send(Self[T], T) -> Unit
-pub fn[T, R] Channel::send_map_to(Self[T], T, @select.Selector[R], () -> R) -> Unit
-pub fn[T] Channel::send_to(Self[T], T, @select.Selector[Unit]) -> Unit
+pub fn[T] Channel::send_to(Self[T], @select.Selector) -> Unit
 
 // Type aliases
 

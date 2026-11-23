@@ -1,23 +1,24 @@
 ///|
+priv struct Reader[T] {
+  coroutine : @coroutine.Coroutine
+  mut value : T?
+}
+
+///|
+priv struct Writer[T] {
+  coroutine : @coroutine.Coroutine
+  value : T
+  mut sent : Bool
+}
+
+///|
 struct Channel[T] {
   capacity : Int32
   values : @deque.Deque[T]
   readers : @deque.Deque[Reader[T]]
   writers : @deque.Deque[Writer[T]]
-}
-
-///|
-priv enum Reader[T] {
-  Recv(@coroutine.Coroutine, mut value~ : T?)
-  RecvTo(@select.Selector[T])
-  RecvMapTo((T, Bool) -> Bool)
-}
-
-///|
-priv enum Writer[T] {
-  Send(@coroutine.Coroutine, T, mut sent~ : Bool)
-  SendTo(@select.Selector[Unit], T)
-  SendMapTo(T, (Bool) -> Bool)
+  recv_selectors : @deque.Deque[@select.Registration]
+  send_selectors : @deque.Deque[@select.Registration]
 }
 
 ///|
@@ -30,291 +31,128 @@ pub fn[T] Channel::Channel(capacity : Int32) -> Channel[T] {
     values: @deque.Deque([]),
     readers: @deque.Deque([]),
     writers: @deque.Deque([]),
+    recv_selectors: @deque.Deque([]),
+    send_selectors: @deque.Deque([]),
   }
 }
 
 ///|
-fn[T] Channel::pop_writer(self : Channel[T]) -> T? {
-  while self.writers.pop_front() is Some(writer) {
-    match writer {
-      Send(coroutine, value, sent=false) as sender => {
-        sender.sent = true
-        coroutine.schedule()
-        return Some(value)
-      }
-      SendTo({ completed: false, coroutine, .. } as selected, value) => {
-        selected.completed = true
-        if coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        selected.value = Some(())
-        return Some(value)
-      }
-      SendMapTo(value, claim) if claim(true) => return Some(value)
-      _ => continue
+fn notify_one(queue : @deque.Deque[@select.Registration]) -> Bool {
+  while queue.pop_front() is Some(reg) {
+    if reg.notify() {
+      return true
     }
   }
-  None
+  false
 }
 
 ///|
-fn[T, R] Channel::pop_writer_for_selector(
-  self : Channel[T],
-  selected : @select.Selector[R],
-) -> T? {
-  let n = self.writers.length()
-  for _ in 0..<n {
-    guard self.writers.pop_front() is Some(writer) else { break }
-    match writer {
-      Send(coroutine, value, sent=false) as sender => {
-        sender.sent = true
-        coroutine.schedule()
-        selected.completed = true
-        return Some(value)
-      }
-      SendTo({ completed: false, coroutine, .. } as writer_selected, value) => {
-        selected.completed = true
-        if writer_selected.completed {
-          selected.completed = false
-          self.writers.push_back(writer)
-          continue
-        }
-        writer_selected.completed = true
-        if coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        writer_selected.value = Some(())
-        return Some(value)
-      }
-      SendMapTo(value, claim) => {
-        if claim(false) {
-          continue
-        }
-        selected.completed = true
-        if claim(false) {
-          selected.completed = false
-          self.writers.push_back(writer)
-          continue
-        }
-        if claim(true) {
-          return Some(value)
-        }
-        selected.completed = false
-        continue
-      }
-      _ => continue
-    }
-  }
-  None
-}
-
-///|
-fn[T, R] Channel::try_send_for_selector(
-  self : Channel[T],
-  value : T,
-  selected : @select.Selector[R],
+fn notify_other(
+  queue : @deque.Deque[@select.Registration],
+  self_selector : @select.Selector,
 ) -> Bool {
-  let n = self.readers.length()
+  let n = queue.length()
   for _ in 0..<n {
-    guard self.readers.pop_front() is Some(reader) else { break }
-    match reader {
-      Recv(coroutine, value=_) as receiver => {
-        receiver.value = Some(value)
-        coroutine.schedule()
-        selected.completed = true
-        return true
-      }
-      RecvTo({ completed: false, coroutine, .. } as reader_selected) => {
-        selected.completed = true
-        if reader_selected.completed {
-          selected.completed = false
-          self.readers.push_back(reader)
-          continue
-        }
-        reader_selected.completed = true
-        if coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        reader_selected.value = Some(value)
-        return true
-      }
-      RecvMapTo(func) => {
-        if func(value, false) {
-          continue
-        }
-        selected.completed = true
-        if func(value, false) {
-          selected.completed = false
-          self.readers.push_back(reader)
-          continue
-        }
-        if func(value, true) {
-          return true
-        }
-        selected.completed = false
-        continue
-      }
-      _ => continue
+    guard queue.pop_front() is Some(reg) else { break }
+    if reg.is_ready() {
+      continue
     }
-  }
-  if self.values.length() < self.capacity {
-    selected.completed = true
-    self.readers.clear()
-    self.values.push_back(value)
-    return true
+    if reg.belongs_to(self_selector) {
+      queue.push_back(reg)
+      continue
+    }
+    if reg.notify() {
+      return true
+    }
   }
   false
 }
 
 ///|
 pub fn[T] Channel::send(self : Channel[T], value : T) -> Unit {
-  while self.readers.pop_front() is Some(reader) {
-    match reader {
-      Recv(coroutine, value=_) as receiver => {
-        receiver.value = Some(value)
-        coroutine.schedule()
-        return
-      }
-      RecvTo({ completed: false, coroutine, .. } as selected) => {
-        selected.completed = true
-        if coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        selected.value = Some(value)
-        return
-      }
-      RecvMapTo(func) if func(value, true) => return
-      _ => continue
-    }
+  if self.readers.pop_front() is Some(reader) {
+    reader.value = Some(value)
+    reader.coroutine.schedule()
+    return
   }
   if self.values.length() < self.capacity {
     self.values.push_back(value)
+    if !self.recv_selectors.is_empty() {
+      ignore(notify_one(self.recv_selectors))
+    }
     return
   }
-  let writer = Send(@coroutine.current(), value, sent=false)
+  let writer = Writer::{ coroutine: @coroutine.current(), value, sent: false, }
   self.writers.push_back(writer)
+  if !self.recv_selectors.is_empty() {
+    ignore(notify_one(self.recv_selectors))
+  }
   @coroutine.suspend()
-  guard writer is Send(_, _, sent=true) else {
+  guard writer.sent else {
     abort("@tonyfettes/co/channel: send woke up before value was received")
   }
 }
 
 ///|
-pub fn[T] Channel::send_to(
-  self : Channel[T],
-  value : T,
-  selected : @select.Selector[Unit],
-) -> Unit {
-  guard !selected.completed else { return }
-  if self.try_send_for_selector(value, selected) {
-    selected.value = Some(())
-    return
+pub fn[T] Channel::recv(self : Channel[T]) -> T {
+  if self.values.pop_front() is Some(value) {
+    if self.writers.pop_front() is Some(writer) {
+      writer.sent = true
+      writer.coroutine.schedule()
+      self.values.push_back(writer.value)
+    } else if !self.send_selectors.is_empty() {
+      ignore(notify_one(self.send_selectors))
+    }
+    return value
   }
-  self.writers.push_back(SendTo(selected, value))
-}
-
-///|
-pub fn[T, R] Channel::send_map_to(
-  self : Channel[T],
-  value : T,
-  selected : @select.Selector[R],
-  f : () -> R,
-) -> Unit {
-  guard !selected.completed else { return }
-  if self.try_send_for_selector(value, selected) {
-    selected.value = Some(f())
-    return
+  if self.writers.pop_front() is Some(writer) {
+    writer.sent = true
+    writer.coroutine.schedule()
+    return writer.value
   }
-  self.writers.push_back(
-    SendMapTo(value, commit => {
-      if !commit {
-        selected.completed
-      } else {
-        guard !selected.completed else { false }
-        selected.completed = true
-        if selected.coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        selected.thunk = Some(f)
-        true
-      }
-    }),
-  )
+  let reader = Reader::{ coroutine: @coroutine.current(), value: None, }
+  self.readers.push_back(reader)
+  if !self.send_selectors.is_empty() {
+    ignore(notify_one(self.send_selectors))
+  }
+  @coroutine.suspend()
+  guard reader.value is Some(value) else {
+    abort("@tonyfettes/co/channel: recv woke up but no value available")
+  }
+  value
 }
 
 ///|
 pub fn[T] Channel::recv_to(
   self : Channel[T],
-  selected : @select.Selector[T],
+  selector : @select.Selector,
 ) -> Unit {
-  guard !selected.completed else { return }
-  if self.values.pop_front() is Some(value) {
-    selected.completed = true
-    if self.pop_writer() is Some(next_value) {
-      self.values.push_back(next_value)
-    }
-    selected.value = Some(value)
+  guard !selector.is_ready() else { return }
+  let id = selector.next_id()
+  if self.values.length() > 0 ||
+    self.writers.length() > 0 ||
+    notify_other(self.send_selectors, selector) {
+    ignore(selector.notify(id))
     return
   }
-  if self.pop_writer_for_selector(selected) is Some(value) {
-    selected.value = Some(value)
-    return
-  }
-  self.readers.push_back(RecvTo(selected))
+  self.recv_selectors.push_back(selector.register(id))
 }
 
 ///|
-pub fn[T, R] Channel::recv_map_to(
+pub fn[T] Channel::send_to(
   self : Channel[T],
-  selected : @select.Selector[R],
-  f : (T) -> R,
+  selector : @select.Selector,
 ) -> Unit {
-  guard !selected.completed else { return }
-  if self.values.pop_front() is Some(value) {
-    selected.completed = true
-    if self.pop_writer() is Some(next_value) {
-      self.values.push_back(next_value)
-    }
-    selected.value = Some(f(value))
+  guard !selector.is_ready() else { return }
+  let id = selector.next_id()
+  if self.readers.length() > 0 || notify_other(self.recv_selectors, selector) {
+    ignore(selector.notify(id))
     return
   }
-  if self.pop_writer_for_selector(selected) is Some(value) {
-    selected.value = Some(f(value))
+  if self.values.length() < self.capacity {
+    ignore(selector.notify(id))
+    self.recv_selectors.clear()
     return
   }
-  self.readers.push_back(
-    RecvMapTo((value, commit) => {
-      if !commit {
-        selected.completed
-      } else {
-        guard !selected.completed else { false }
-        selected.completed = true
-        if selected.coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-        selected.thunk = Some(() => f(value))
-        true
-      }
-    }),
-  )
-}
-
-///|
-pub fn[T] Channel::recv(self : Channel[T]) -> T {
-  if self.values.pop_front() is Some(value) {
-    if self.pop_writer() is Some(next_value) {
-      self.values.push_back(next_value)
-    }
-    return value
-  }
-  if self.pop_writer() is Some(value) {
-    return value
-  }
-  let reader = Recv(@coroutine.current(), value=None)
-  self.readers.push_back(reader)
-  @coroutine.suspend()
-  guard reader is Recv(_, value~) && value is Some(value) else {
-    abort("@tonyfettes/co/channel: recv woke up but no value available")
-  }
-  value
+  self.send_selectors.push_back(selector.register(id))
 }
