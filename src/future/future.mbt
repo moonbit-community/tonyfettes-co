@@ -1,39 +1,26 @@
 ///|
 struct Future[T] {
   mut value : T?
-  waiters : Array[Waiter[T]]
-}
-
-///|
-priv enum Waiter[T] {
-  Wait(@coroutine.Coroutine)
-  WaitTo(@select.Selector[T])
-  WaitMapTo((T) -> Unit)
+  waiters : Array[@coroutine.Coroutine]
+  selectors : Array[@select.Registration]
 }
 
 ///|
 pub fn[T] Future::new() -> Future[T] {
-  Future::{ value: None, waiters: Array(), }
+  Future::{ value: None, waiters: Array(), selectors: Array(), }
 }
 
 ///|
 pub fn[T] Future::set(self : Future[T], value : T) -> Unit {
   self.value = Some(value)
   for waiter in self.waiters {
-    match waiter {
-      Wait(coroutine) => coroutine.schedule()
-      WaitTo({ completed: false, coroutine, .. } as selector) => {
-        selector.completed = true
-        selector.value = Some(value)
-        if coroutine is Some(coroutine) {
-          coroutine.schedule()
-        }
-      }
-      WaitMapTo(func) => func(value)
-      _ => continue
-    }
+    waiter.schedule()
   }
   self.waiters.clear()
+  for reg in self.selectors {
+    ignore(reg.notify())
+  }
+  self.selectors.clear()
 }
 
 ///|
@@ -41,7 +28,7 @@ pub fn[T] Future::wait(self : Future[T]) -> T {
   if self.value is Some(value) {
     return value
   }
-  self.waiters.push(Wait(@coroutine.current()))
+  self.waiters.push(@coroutine.current())
   @coroutine.suspend()
   guard self.value is Some(value) else {
     abort("@tonyfettes/co: wait woke up but no value available")
@@ -52,37 +39,13 @@ pub fn[T] Future::wait(self : Future[T]) -> T {
 ///|
 pub fn[T] Future::wait_to(
   self : Future[T],
-  selector : @select.Selector[T],
+  selector : @select.Selector,
 ) -> Unit {
-  guard !selector.completed else { return }
-  if self.value is Some(value) {
-    selector.completed = true
-    selector.value = Some(value)
+  guard !selector.is_ready() else { return }
+  let id = selector.next_id()
+  if self.value is Some(_) {
+    ignore(selector.notify(id))
     return
   }
-  self.waiters.push(WaitTo(selector))
-}
-
-///|
-pub fn[T, R] Future::wait_map_to(
-  self : Future[T],
-  selector : @select.Selector[R],
-  f : (T) -> R,
-) -> Unit {
-  guard !selector.completed else { return }
-  if self.value is Some(value) {
-    selector.completed = true
-    selector.value = Some(f(value))
-    return
-  }
-  self.waiters.push(
-    WaitMapTo(value => {
-      guard !selector.completed else { return }
-      selector.completed = true
-      if selector.coroutine is Some(coroutine) {
-        coroutine.schedule()
-      }
-      selector.thunk = Some(() => f(value))
-    }),
-  )
+  self.selectors.push(selector.register(id))
 }

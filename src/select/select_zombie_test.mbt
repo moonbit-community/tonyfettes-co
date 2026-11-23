@@ -1,14 +1,33 @@
 ///|
 test "select leaves zombie reader on early poll win" {
-  let a : @channel.Channel[Int32] = @channel.Channel(1) // 空,case 会注册 reader
+  let a : @channel.Channel[Int32] = @channel.Channel(1)
   let b : @channel.Channel[Int32] = @channel.Channel(1)
-  b.send(1) // case 2 poll 阶段直接命中
-  let first = @select.select <| selector => {
+  b.send(1)
+  let ready = @select.select <| selector => {
     a.recv_to(selector)
     b.recv_to(selector)
   }
-  inspect(first, content="1")
-  // select 已返回,但 a 的队列里还挂着这次 select 的 reader(box 仍为 None)
-  a.send(42) // 僵尸 reader 认领了 42,还把当前任务 schedule 了一次
-  inspect(a.recv(), content="42") // 42 已被偷走 → recv 挂起后被幽灵唤醒 → abort
+  inspect(ready, content="1")
+  inspect(b.recv(), content="1")
+  // `a`'s leftover registration is a zombie and must not interfere with later sends.
+  a.send(42)
+  inspect(a.recv(), content="42")
+}
+
+///|
+test "select leaves zombie reader on suspended win" {
+  let a : @channel.Channel[Int32] = @channel.Channel(0)
+  let b : @channel.Channel[Int32] = @channel.Channel(1)
+  let result = @future.Future::new()
+  let _ = @coroutine.Coroutine(() => {
+    let idx = @select.select <| selector => {
+      a.recv_to(selector)
+      b.recv_to(selector)
+    }
+    result.set(if idx == 0 { a.recv() } else { b.recv() })
+  })
+  a.send(1)
+  inspect(result.wait(), content="1")
+  b.send(99)
+  inspect(b.recv(), content="99")
 }

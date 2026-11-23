@@ -6,19 +6,30 @@ import {
 }
 
 // Values
-pub fn[R] select((Selector[R]) -> Unit) -> R
+pub fn select((Selector) -> Unit) -> Int32
 
 // Errors
 
 // Types and methods
-pub(all) struct Selector[T] {
-  mut coroutine : @coroutine.Coroutine?
-  mut completed : Bool
-  mut value : T?
-  mut thunk : (() -> T)?
+pub struct Registration {
+  selector : Selector
+  id : Int32
 }
-pub fn[T] Selector::Selector() -> Self[T]
-pub fn[T] Selector::wait(Self[T]) -> T
+pub fn Registration::belongs_to(Self, Selector) -> Bool
+pub fn Registration::is_ready(Self) -> Bool
+pub fn Registration::notify(Self) -> Bool
+
+pub struct Selector {
+  mut coroutine : @coroutine.Coroutine?
+  mut count : Int32
+  mut ready : Int32
+}
+pub fn Selector::Selector() -> Self
+pub fn Selector::is_ready(Self) -> Bool
+pub fn Selector::next_id(Self) -> Int32
+pub fn Selector::notify(Self, Int32) -> Bool
+pub fn Selector::register(Self, Int32) -> Registration
+pub fn Selector::wait(Self) -> Int32
 
 // Type aliases
 

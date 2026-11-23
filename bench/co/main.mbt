@@ -133,10 +133,12 @@ fn bench_select() -> Unit {
     } else {
       b.send(i)
     }
-    sum += @select.select(s => {
-      a.recv_map_to(s, _ => 1)
-      b.recv_map_to(s, _ => 1)
+    let idx = @select.select(s => {
+      a.recv_to(s)
+      b.recv_to(s)
     })
+    ignore(if idx == 0 { a.recv() } else { b.recv() })
+    sum += 1
   }
   if sum != SELECT_OPS {
     println("select mismatch: \{sum}")
@@ -145,18 +147,79 @@ fn bench_select() -> Unit {
 
 ///|
 /// Pingpong where both sides receive through select: exercises the
-/// suspend/deferred-wake path of select.
+/// suspend/wake path of select.
 fn bench_select_suspend() -> Unit {
-  let ping : @channel.Channel[Int32] = @channel.Channel(0)
-  let pong : @channel.Channel[Int32] = @channel.Channel(0)
+  let ping : @channel.Channel[Int32] = @channel.Channel(1)
+  let pong : @channel.Channel[Int32] = @channel.Channel(1)
   let _ = @coroutine.Coroutine(() => {
     for _ in 0..<SELECT_ROUNDS {
-      pong.send(@select.select(s => ping.recv_map_to(s, x => x)))
+      ignore(@select.select(s => ping.recv_to(s)))
+      pong.send(ping.recv())
     }
   })
   for _ in 0..<SELECT_ROUNDS {
     ping.send(1)
-    ignore(@select.select(s => pong.recv_map_to(s, x => x)))
+    ignore(@select.select(s => pong.recv_to(s)))
+    ignore(pong.recv())
+  }
+}
+
+///|
+/// Heterogeneous two-way select (Int32 -> String vs String), ready path.
+fn bench_select_hetero() -> Unit {
+  let int_chan : @channel.Channel[Int32] = @channel.Channel(1)
+  let str_chan : @channel.Channel[String] = @channel.Channel(1)
+  let mut sum = 0
+  for i in 0..<SELECT_OPS {
+    if i % 2 == 0 {
+      int_chan.send(i)
+    } else {
+      str_chan.send("hello")
+    }
+    let idx = @select.select(s => {
+      int_chan.recv_to(s)
+      str_chan.recv_to(s)
+    })
+    let s = if idx == 0 { int_chan.recv().to_string() } else { str_chan.recv() }
+    sum += s.length()
+  }
+  if sum == 0 {
+    println("select_hetero mismatch")
+  }
+}
+
+///|
+/// Heterogeneous two-way select (Int32 -> String vs String), suspend path.
+fn bench_select_hetero_suspend() -> Unit {
+  let int_chan : @channel.Channel[Int32] = @channel.Channel(1)
+  let str_chan : @channel.Channel[String] = @channel.Channel(1)
+  let ack : @channel.Channel[Int32] = @channel.Channel(1)
+  let _ = @coroutine.Coroutine(() => {
+    let mut sum = 0
+    for _ in 0..<SELECT_ROUNDS {
+      let idx = @select.select(s => {
+        int_chan.recv_to(s)
+        str_chan.recv_to(s)
+      })
+      let s = if idx == 0 {
+        int_chan.recv().to_string()
+      } else {
+        str_chan.recv()
+      }
+      sum += s.length()
+      ack.send(1)
+    }
+    if sum == 0 {
+      println("select_hetero_suspend mismatch")
+    }
+  })
+  for i in 0..<SELECT_ROUNDS {
+    if i % 2 == 0 {
+      int_chan.send(i)
+    } else {
+      str_chan.send("hello")
+    }
+    ignore(ack.recv())
   }
 }
 
@@ -172,9 +235,12 @@ fn main {
     "parked" => run("parked", bench_parked)
     "select" => run("select", bench_select)
     "select_suspend" => run("select_suspend", bench_select_suspend)
+    "select_hetero" => run("select_hetero", bench_select_hetero)
+    "select_hetero_suspend" =>
+      run("select_hetero_suspend", bench_select_hetero_suspend)
     _ =>
       println(
-        "usage: co_bench <chan|pingpong|chain|spawn|parked|select|select_suspend>",
+        "usage: co_bench <chan|pingpong|chain|spawn|parked|select|select_suspend|select_hetero|select_hetero_suspend>",
       )
   }
 }
