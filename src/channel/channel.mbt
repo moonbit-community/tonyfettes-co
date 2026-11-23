@@ -58,12 +58,13 @@ fn[T] Channel::pop_writer(self : Channel[T]) -> T? {
 }
 
 ///|
-fn[T, R] Channel::pop_writer_for(
+fn[T, R] Channel::pop_writer_for_selector(
   self : Channel[T],
   selected : @select.Selector[R],
 ) -> T? {
-  let mut skipped : Array[Writer[T]]? = None
-  while self.writers.pop_front() is Some(writer) {
+  let n = self.writers.length()
+  for _ in 0..<n {
+    guard self.writers.pop_front() is Some(writer) else { break }
     match writer {
       Send(coroutine, value, sent=false) as sender => {
         sender.sent = true
@@ -75,10 +76,7 @@ fn[T, R] Channel::pop_writer_for(
         selected.completed = true
         if writer_selected.completed {
           selected.completed = false
-          match skipped {
-            Some(buf) => buf.push(writer)
-            None => skipped = Some([writer])
-          }
+          self.writers.push_back(writer)
           continue
         }
         writer_selected.completed = true
@@ -95,10 +93,7 @@ fn[T, R] Channel::pop_writer_for(
         selected.completed = true
         if claim(false) {
           selected.completed = false
-          match skipped {
-            Some(buf) => buf.push(writer)
-            None => skipped = Some([writer])
-          }
+          self.writers.push_back(writer)
           continue
         }
         if claim(true) {
@@ -110,22 +105,18 @@ fn[T, R] Channel::pop_writer_for(
       _ => continue
     }
   }
-  if skipped is Some(buf) {
-    for i = buf.length() - 1; i >= 0; i = i - 1 {
-      self.writers.push_front(buf[i])
-    }
-  }
   None
 }
 
 ///|
-fn[T, R] Channel::try_send_for(
+fn[T, R] Channel::try_send_for_selector(
   self : Channel[T],
   value : T,
   selected : @select.Selector[R],
 ) -> Bool {
-  let mut skipped : Array[Reader[T]]? = None
-  while self.readers.pop_front() is Some(reader) {
+  let n = self.readers.length()
+  for _ in 0..<n {
+    guard self.readers.pop_front() is Some(reader) else { break }
     match reader {
       Recv(coroutine, value=_) as receiver => {
         receiver.value = Some(value)
@@ -137,10 +128,7 @@ fn[T, R] Channel::try_send_for(
         selected.completed = true
         if reader_selected.completed {
           selected.completed = false
-          match skipped {
-            Some(buf) => buf.push(reader)
-            None => skipped = Some([reader])
-          }
+          self.readers.push_back(reader)
           continue
         }
         reader_selected.completed = true
@@ -157,10 +145,7 @@ fn[T, R] Channel::try_send_for(
         selected.completed = true
         if func(value, false) {
           selected.completed = false
-          match skipped {
-            Some(buf) => buf.push(reader)
-            None => skipped = Some([reader])
-          }
+          self.readers.push_back(reader)
           continue
         }
         if func(value, true) {
@@ -174,13 +159,9 @@ fn[T, R] Channel::try_send_for(
   }
   if self.values.length() < self.capacity {
     selected.completed = true
+    self.readers.clear()
     self.values.push_back(value)
     return true
-  }
-  if skipped is Some(buf) {
-    for i = buf.length() - 1; i >= 0; i = i - 1 {
-      self.readers.push_front(buf[i])
-    }
   }
   false
 }
@@ -225,7 +206,7 @@ pub fn[T] Channel::send_to(
   selected : @select.Selector[Unit],
 ) -> Unit {
   guard !selected.completed else { return }
-  if self.try_send_for(value, selected) {
+  if self.try_send_for_selector(value, selected) {
     selected.value = Some(())
     return
   }
@@ -240,7 +221,7 @@ pub fn[T, R] Channel::send_map_to(
   f : () -> R,
 ) -> Unit {
   guard !selected.completed else { return }
-  if self.try_send_for(value, selected) {
+  if self.try_send_for_selector(value, selected) {
     selected.value = Some(f())
     return
   }
@@ -275,7 +256,7 @@ pub fn[T] Channel::recv_to(
     selected.value = Some(value)
     return
   }
-  if self.pop_writer_for(selected) is Some(value) {
+  if self.pop_writer_for_selector(selected) is Some(value) {
     selected.value = Some(value)
     return
   }
@@ -297,7 +278,7 @@ pub fn[T, R] Channel::recv_map_to(
     selected.value = Some(f(value))
     return
   }
-  if self.pop_writer_for(selected) is Some(value) {
+  if self.pop_writer_for_selector(selected) is Some(value) {
     selected.value = Some(f(value))
     return
   }

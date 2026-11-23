@@ -386,6 +386,47 @@ test "manual Selector: send completes before wait() is called" {
 }
 
 ///|
+test "select: skipping own case preserves FIFO order for other waiters" {
+  // Selector registers send(1) on unbuffered c, then another coroutine parks
+  // send(2) and send(3) behind it, then the same selector registers recv on c:
+  // recv must skip its own send(1) and match send(2), leaving send(3) next.
+  let c1 : @channel.Channel[Int32] = @channel.Channel(0)
+  let s1 : @select.Selector[String] = @select.Selector()
+  c1.send_map_to(1, s1) <| () => { "self-send" }
+  let done2 = @future.Future::new()
+  let done3 = @future.Future::new()
+  let _ = @coroutine.Coroutine(() => {
+    c1.send(2)
+    done2.set(())
+  })
+  let _ = @coroutine.Coroutine(() => {
+    c1.send(3)
+    done3.set(())
+  })
+  c1.recv_map_to(s1) <| x => { "recvd:\{x}" }
+  assert_eq(s1.wait(), "recvd:2")
+  done2.wait()
+  assert_eq(c1.recv(), 3)
+  done3.wait()
+
+  // Symmetric: selector registers recv on c, then two other readers park behind
+  // it, then the same selector registers send(10): send must skip its own recv
+  // and wake the first external reader, leaving the second external reader next.
+  let c2 : @channel.Channel[Int32] = @channel.Channel(0)
+  let s2 : @select.Selector[String] = @select.Selector()
+  c2.recv_map_to(s2) <| x => { "self-recv:\{x}" }
+  let got1 = @future.Future::new()
+  let got2 = @future.Future::new()
+  let _ = @coroutine.Coroutine(() => got1.set(c2.recv()))
+  let _ = @coroutine.Coroutine(() => got2.set(c2.recv()))
+  c2.send_map_to(10, s2) <| () => { "sent" }
+  assert_eq(s2.wait(), "sent")
+  assert_eq(got1.wait(), 10)
+  c2.send(20)
+  assert_eq(got2.wait(), 20)
+}
+
+///|
 test "panic negative capacity" {
   let _ : @channel.Channel[Int32] = @channel.Channel(-1)
 }
